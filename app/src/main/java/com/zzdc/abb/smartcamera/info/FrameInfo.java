@@ -20,15 +20,18 @@ public class FrameInfo implements Serializable{
     public int reserve2;
     public long timestamp;
 
-    public byte[] parseContent(short _codec_id, byte _flags) {
+    public byte[] parseContent(short _codec_id, byte _flags,long aTimestamp) {
 
         byte[] result = new byte[16];
         byte[] arg1 = Packet.shortToByteArray_Little(_codec_id);
         byte[] arg2 = new byte[1];
         arg2[0] = _flags;
 
+        byte[] arg3 = com.tutk.IOTC.Packet.longToByteArray_Little(aTimestamp);
+
         System.arraycopy(arg1, 0, result, 0, 2);
         System.arraycopy(arg2, 0, result, 2, 1);
+        System.arraycopy(arg3, 0, result, 3, 4);
         return result;
     }
 }

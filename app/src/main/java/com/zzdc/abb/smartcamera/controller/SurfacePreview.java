@@ -8,24 +8,27 @@ import android.app.Activity;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.content.Context;
+import android.view.SurfaceView;
 
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 
-public class SurfacePreview implements SurfaceHolder.Callback{
+public class SurfacePreview extends SurfaceView implements SurfaceHolder.Callback{
     private final static String TAG = "SurfacePreview";
 //    private VideoGather.CameraOperateCallback mCallback;
-    private PermissionNotify listener;
     private Activity mActivity;
     private ApplicationSetting mAplicationSetting = null;
+    public static SurfaceHolder surfaceHolder;
 
-    public interface PermissionNotify{
-        boolean hasPermission();
-    }
 
-    public SurfacePreview(Activity activity,PermissionNotify listener){
-//        mCallback = cb;
+    public SurfacePreview(Activity activity){
+        
+        super(activity);
+        surfaceHolder = getHolder();
+        surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        surfaceHolder.setFixedSize(400,300);
+        surfaceHolder.addCallback(this);
+        
         mActivity = activity;
-        this.listener = listener;
     }
 
     @Override

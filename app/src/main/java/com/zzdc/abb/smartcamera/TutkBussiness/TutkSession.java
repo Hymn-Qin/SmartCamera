@@ -8,15 +8,21 @@ import com.tutk.IOTC.IOTCAPIs;
 import com.tutk.IOTC.St_SInfo;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.controller.AvMediaTransfer;
+import com.zzdc.abb.smartcamera.controller.MainActivity;
 import com.zzdc.abb.smartcamera.info.FrameInfo;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
 import com.zzdc.abb.smartcamera.util.LogTool;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class TutkSession implements AvMediaTransfer.AvTransferLister{
     private static final String TAG = TutkSession.class.getSimpleName();
+    private static final boolean DEBUG = true;
+
     private int mSessionID;
     private int mChannelID;
     private int mAudioRecChannelID;
@@ -111,7 +117,7 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
                 mChannelID = tmpAVIndex;
                 mAudioRecChannelID = avIndex;
 
-                mWriteThread = new WriteThread("writeThread");
+                mWriteThread = new WriteThread("TUTK write thread sid=" + mSessionID);
                 mWriteThread.start();
 
                 byte[] ioCtrlBuf = new byte[MAX_BUF_SIZE];
@@ -124,7 +130,6 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
                         System.arraycopy(ioCtrlBuf,0,jsonCmdBuf,0,tmpResult);
                         setState(SESSION_STATE_EXECUTING);
                         tutkCmdManger.HandleIOCTRLCmd(mSessionID,mChannelID,jsonCmdBuf,ioType[0]);
-                        jsonCmdBuf = null;
                     }else if (tmpResult != AVAPIs.AV_ER_TIMEOUT) {
                         LogTool.d(TAG, "avRecvIOCtrl(), rc= " + tmpResult);
                         tutkCmdManger.closeIOCTRL();
@@ -182,30 +187,16 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
 
         @Override
         public void run() {
-            LogTool.d(TAG, "run write thread");
-            String responseStr = null;
-            while (mState != SESSION_STATE_IDLE) {
+            LogTool.d(TAG, "TUTK write thread start, sid=" + mSessionID);
+            while (mState != SESSION_STATE_IDLE && !interrupted()) {
                 try {
-                    responseStr = mWriteList.take();
+                    String responseStr = mWriteList.take();
+                    byte[] message = (byte[]) responseStr.getBytes();
+                    int result =  AVAPIs.avSendIOCtrl(mChannelID, -1, message, message.length);
+                    LogTool.d(TAG,"Send IOCtrl, sid=" + mSessionID +", result: " + result + ", message: " + responseStr);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    LogTool.w(TAG, "TUTK write thread exception, sid=" + mSessionID, e);
                 }
-                //fix responseStr is null
-                if(TextUtils.isEmpty(responseStr)){
-                    continue;
-                }
-                Log.d(TAG, "run: responseStr : "+responseStr);
-                byte[] message = (byte[]) responseStr.getBytes();
-                LogTool.d(TAG,"send messge :" + new String(message));
-                int result =  AVAPIs.avSendIOCtrl(mChannelID,-1,message,message.length);
-                Log.d(TAG,"avSendIOCtrl result: " + result);
-//                if (result > 0){
-//                    //result = 0 send success
-//                }else if (result != AVAPIs.AV_ER_TIMEOUT){
-//                    LogTool.d(TAG,"stop write thread");
-//                    break;
-//                }
-//                AVAPIs.avServStop(mChannelID);
             }
         }
 
@@ -220,70 +211,57 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
 
     @Override
     public void sendVideoTutkFrame(TutkFrame tutkFrame) {
-        int i = 0;
-        int tmpResult = 0;
-        byte[] buf_info = new byte[1024];
         if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
-            LogTool.d(TAG, "video data not ready");
+            LogTool.w(TAG, "Video data not ready");
             return;
         }
 
-        FrameInfo frame = tutkFrame.getFrameInfo();
-        buf_info = frame.parseContent(frame.codec_id, frame.flags);
-
-        tmpResult = AVAPIs.avSendFrameData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
-        LogTool.d(TAG, "avSendFrameData(), Result= " + tmpResult + " avIndex= " + mChannelID + " data.length = " + tutkFrame.getDataLen());
-        if (tmpResult == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
-            Log.d(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
-
-        } else if (tmpResult == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
-            Log.d(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
-
-        } else if (tmpResult == IOTCAPIs.IOTC_ER_INVALID_SID) {
-            Log.d(TAG,"IOTC_ER_INVALID_SID");
-
-        } else if (tmpResult < 0) {
-//            LogTool.d(TAG, "avSendFrameData(), XXXXXXXXXX");
+        FrameInfo frameInfo = tutkFrame.getFrameInfo();
+        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags, frameInfo.timestamp);
+        int rst = AVAPIs.avSendFrameData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
+        debug("Send video data, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+        if (rst == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
+            LogTool.w(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
+        } else if (rst == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
+            LogTool.w(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
+        } else if (rst == IOTCAPIs.IOTC_ER_INVALID_SID) {
+            LogTool.w(TAG,"IOTC_ER_INVALID_SID");
+        } else if (rst < 0) {
             mfailCount = mfailCount + 1;
         }
 
-        if (tmpResult == AVAPIs.AV_ER_NoERROR){
+        if (rst == AVAPIs.AV_ER_NoERROR){
             mfailCount = 0;
         }
+
         if(mfailCount >= 800 ){
-            Log.d(TAG,"send video data fail 800");
+            LogTool.e(TAG,"Send video data fail 800");
             setState(SESSION_STATE_IDLE);
         }
-
     }
 
     @Override
     public void sendAudioTutkFrame(TutkFrame tutkFrame) {
-
-        int i = 0;
-        int tmpResult = 0;
-        byte[] buf_frame = null;
-        byte[] buf_info = new byte[1024];
-
         if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
-//            LogTool.d(TAG,"audio data not ready");
+            LogTool.w(TAG, "Audio data not ready");
             return;
         }
-        FrameInfo frame = tutkFrame.getFrameInfo();
-        buf_info = frame.parseContent(frame.codec_id, frame.flags);
-        tmpResult = AVAPIs.avSendAudioData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
-//        LogTool.d (TAG,"avSendAudioData(), Result= " + tmpResult+" avIndex= "+mChannelID+ " buf_frame.length = " + tutkFrame.getData().length );
-        if (tmpResult == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
-            Log.d(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
+
+        FrameInfo frameInfo = tutkFrame.getFrameInfo();
+        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags,frameInfo.timestamp);
+        int rst = AVAPIs.avSendAudioData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
+        debug("Send audio data, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+        if (rst == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
+            LogTool.w(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
             setState(SESSION_STATE_IDLE);
-        } else if (tmpResult == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
-            Log.d(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
+        } else if (rst == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
+            LogTool.w(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
             setState(SESSION_STATE_IDLE);
-        } else if (tmpResult == IOTCAPIs.IOTC_ER_INVALID_SID) {
-            Log.d(TAG,"IOTC_ER_INVALID_SID");
+        } else if (rst == IOTCAPIs.IOTC_ER_INVALID_SID) {
+            LogTool.w(TAG,"IOTC_ER_INVALID_SID");
             setState(SESSION_STATE_IDLE);
-        } else if (tmpResult < 0) {
-//                LogTool.d(TAG,"avSendAudioData(), XXXXXXXXXX");
+        } else if (rst < 0) {
+            LogTool.w(TAG,"IOTC_ER_xxx");
         }
     }
 
@@ -292,15 +270,11 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
         private static final int AUDIO_BUF_SIZE = 1024;
         private static final int FRAME_INFO_SIZE = 16;
 
-        public RemoteAudioReceiveThread(){
-
-        }
+        public RemoteAudioReceiveThread(){}
 
         @Override
         public void run() {
             Log.d(TAG,Thread.currentThread().getName() + " start");
-
-
             AVAPIs av = new AVAPIs();
             byte[] frameInfo = new byte[FRAME_INFO_SIZE];
             byte[] audioBuffer = new byte[AUDIO_BUF_SIZE];
@@ -392,11 +366,20 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
             mWriteThread.interrupt();
             mWriteThread = null;
         }
-
+        //release server mode
         AVAPIs.avServStop(mChannelID);
         AVAPIs.avServExit(mSessionID,0);
+        //release client mode
+        AVAPIs.avClientStop(mAudioRecChannelID);
+        AVAPIs.avClientExit(mSessionID,1);
+
         IOTCAPIs.IOTC_Session_Close(mSessionID);
         tutkCmdManger.uninit();
     }
 
+    private void debug(String msg) {
+        if (DEBUG || MainActivity.TRANSFER_DEBUG) {
+            LogTool.d(TAG, msg);
+        }
+    }
 }

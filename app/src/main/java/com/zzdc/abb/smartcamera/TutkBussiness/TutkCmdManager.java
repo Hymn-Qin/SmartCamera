@@ -1,16 +1,23 @@
 package com.zzdc.abb.smartcamera.TutkBussiness;
 
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.ptz.PTZControl.PTZControlCallBackContainer;
 import com.ptz.PTZControl.PTZControlManager;
+import com.ptz.motorControl.MotorCmd;
+import com.ptz.motorControl.MotorDevicePose;
 import com.ptz.motorControl.MotorManager;
 import com.tutk.IOTC.AVIOCTRLDEFs;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.AACDecoder;
+import com.zzdc.abb.smartcamera.controller.AlertVideoManager;
+import com.zzdc.abb.smartcamera.controller.AudioEncoder;
 import com.zzdc.abb.smartcamera.controller.AudioGather;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
 import com.zzdc.abb.smartcamera.controller.AvMediaTransfer;
+import com.zzdc.abb.smartcamera.controller.HistoryManager;
+import com.zzdc.abb.smartcamera.controller.VideoEncoder;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
 import org.json.JSONException;
@@ -18,23 +25,30 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.UnsupportedEncodingException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 public class TutkCmdManager {
     private static final String TAG = TutkCmdManager.class.getSimpleName();
     private TutkSession mTutkSession;
-    private AvMediaTransfer avMediaTransfer = AvMediaTransfer.getInstance();
+    private AvMediaTransfer mMediaTransfer = new AvMediaTransfer();
     private MotorManager mMotorManager = MotorManager.getManger();
     private PTZControlManager mViewPathManger = PTZControlManager.getInstance();
     private AvMediaRecorder mAvMediaRecorder = null;
     private AACDecoder mAACDecoder;
     private ApplicationSetting mAplicationSetting = null;
+    private HistoryManager mHistoryManager;
+
+    private AlertVideoManager alertVideoManager;
 
     public TutkCmdManager(TutkSession tutkSession) {
         mTutkSession = tutkSession;
     }
 
     public void closeIOCTRL() {
-        avMediaTransfer.unRegisterAvTransferListener(mTutkSession);
+        mMediaTransfer.unRegisterAvTransferListener(mTutkSession);
     }
 
     public void uninit() {
@@ -62,57 +76,39 @@ public class TutkCmdManager {
         ByteArrayInputStream in = null;
         switch (type) {
             case AVIOCTRLDEFs.IOTYPE_USER_IPCAM_START:
-                LogTool.d(TAG, "  IOTYPE_USER_IPCAM_START start");
-                try {
-                    in = new ByteArrayInputStream(buf, 0, 1);
-                    int data = in.read();
-                    while (data != -1) {
-                        data = in.read();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                LogTool.d(TAG, "read cmd:IOTYPE_USER_IPCAM_START  data end.");
-                avMediaTransfer.registerAvTransferListener(mTutkSession);
+                LogTool.d(TAG, "  IOTYPE_USER_IPCAM_START");
+                AudioEncoder.getInstance().registerEncoderListener(mMediaTransfer);
+                VideoEncoder.getInstance().registerEncoderListener(mMediaTransfer);
+                mMediaTransfer.startAvMediaTransfer();
+                mMediaTransfer.registerAvTransferListener(mTutkSession);
                 mTutkSession.writeMessge("ok");
                 break;
 
             case AVIOCTRLDEFs.IOTYPE_USER_IPCAM_STOP:
                 LogTool.d(TAG, " IOTYPE_USER_IPCAM_STOP start");
-                try {
-                    in = new ByteArrayInputStream(buf, 0, 1);
-                    int data = in.read();
-                    while (data != -1) {
-                        data = in.read();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
+                mTutkSession.writeMessge("ok");
+                AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                if (mHistoryManager != null) {
+                    mHistoryManager.mExtrator.unRegisterExtratorListener(mMediaTransfer);
                 }
-                avMediaTransfer.unRegisterAvTransferListener(mTutkSession);
+                mMediaTransfer.unRegisterAvTransferListener(mTutkSession);
+                mMediaTransfer.stopAvMediaTransfer();
                 LogTool.d(TAG, "read cmd:IOTYPE_USER_IPCAM_STOP  data end.");
-//                mTutkSession.destorySession();
                 mTutkSession.setState(TutkSession.SESSION_STATE_IDLE);
-//                closeIOCTRL();
                 break;
 
-            case AVIOCTRLDEFs.IOTYPE_USER_IPCAM_AUDIOSTART:
-                //               mAACDecoder = new AACDecoder();
-//                mTutkSession.registRemoteAudioDataMonitor(mAACDecoder);
-                break;
-            case AVIOCTRLDEFs.IOTYPE_USER_IPCAM_AUDIOSTOP:
-//                mTutkSession.unregistRemoteAudioDataMonitor(mAACDecoder);
-                //               mAACDecoder = null;
-                break;
         }
 
         if (type != -1) return;
 
         String receiveJsonStr = null;
         String mesgType = null;
+        JSONObject ptzObj = null;
         try {
             receiveJsonStr = new String(buf, "UTF-8");
             LogTool.d(TAG, "receiveJsonStr: " + receiveJsonStr);
-            JSONObject ptzObj = new JSONObject(receiveJsonStr);
+            ptzObj = new JSONObject(receiveJsonStr);
             mesgType = ptzObj.getString("type");
 
         } catch (JSONException e) {
@@ -203,7 +199,159 @@ public class TutkCmdManager {
                 mAvMediaRecorder.avMediaRecorderStop();
                 break;
 
+            case "getHistoryInfoList":
+                Log.d(TAG, " getHistoryInfoList ");
+                mHistoryManager = HistoryManager.getInstance();
+                ArrayList<String> tmpResponce = mHistoryManager.getHistoryVideoFileInfo();
 
+                for (String tmpRes : tmpResponce) {
+                    Log.d(TAG, "getHistoryInfoList " + tmpRes);
+                    mTutkSession.writeMessge(tmpRes);
+                }
+
+                String tmpEnd = "{" +
+                        "   \"type\" : \"getHistoryInfoList\"," +
+                        "   \"ret\" :\" 1\" " +
+                        "}";
+                mTutkSession.writeMessge(tmpEnd);
+
+                break;
+            case "setHistoryVideo":
+                LogTool.d(TAG, " setHistoryVideo start");
+                String tmpTime = null;
+                try {
+                    tmpTime = ptzObj.getString("time");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Log.d(TAG, "setHistoryVideo Exception " + e.toString());
+                }
+                if (isDoStopHistory(tmpTime)) {
+                    Log.d(TAG, "DoStopHistory");
+                    if (null == mHistoryManager)
+                        return;
+                    mHistoryManager.mExtrator.unRegisterExtratorListener(mMediaTransfer);
+                    mHistoryManager.release();
+                    break;
+                } else {
+//                    closeIOCTRL();
+                    Log.d(TAG, "DoHistory");
+                    mHistoryManager = HistoryManager.getInstance();
+
+                    if (mHistoryManager.handleHistoryVideo(tmpTime) < 0) {
+                        String tmpRet = "{" +
+                                "   \"ret\" : \"-1\"," +
+                                "   \"desc\" :\" 文件不存在\" " +
+                                "}";
+                        mTutkSession.writeMessge(tmpRet);
+                    } else {
+                        String tmpRet = "{" +
+                                "   \"ret\" : \"0\"," +
+                                "   \"desc\" :\" \" " +
+                                "}";
+                        mTutkSession.writeMessge(tmpRet);
+                        //canel real time data
+                        AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                        VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                        //register history
+                        mHistoryManager.mExtrator.registerExtratorListener(mMediaTransfer);
+                    }
+
+                    break;
+                }
+            case "CHANGE_POSE":
+                try {
+                    JSONObject jsonObject = new JSONObject(receiveJsonStr);
+                    boolean POSE = jsonObject.getBoolean("POSE");
+                    MotorCmd.DEVICE_POSE = POSE;
+                    MotorDevicePose motorDevicePose = MotorDevicePose.getInstance();
+                    motorDevicePose.setDevicePose(POSE);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                break;
+            case "getAlertInfoList":
+                Log.d("qxj", " getAlertInfoList ");
+                alertVideoManager = AlertVideoManager.getInstance();
+                ArrayList<String> tmpAlertResponce = alertVideoManager.getHistoryVideoFileInfo();
+
+                for (String tmpRes : tmpAlertResponce) {
+                    Log.d("qxj", "getAlertInfoList " + tmpRes);
+                    mTutkSession.writeMessge(tmpRes);
+                }
+
+                String tmpAlertEnd = "{" +
+                        "   \"type\" : \"getAlertInfoList\"," +
+                        "   \"ret\" :\" 1\" " +
+                        "}";
+                mTutkSession.writeMessge(tmpAlertEnd);
+
+                break;
+            case "setAlertVideo":
+                LogTool.d("qxj", " setAlertVideo start");
+                String tmpTime1 = null;
+                try {
+                    tmpTime1 = ptzObj.getString("time");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Log.d("qxj", "setAlertVideo Exception " + e.toString());
+                }
+                if (isDoStopHistory(tmpTime1)) {
+                    Log.d("qxj", "DoStop setAlertVideo");
+                    if (null == alertVideoManager)
+                        return;
+                    alertVideoManager.mExtrator.unRegisterExtratorListener(mMediaTransfer);
+                    alertVideoManager.release();
+                } else {
+                    Log.d("qxj", "Do setAlertVideo");
+                    alertVideoManager = AlertVideoManager.getInstance();
+                    if (alertVideoManager.handleHistoryVideo(tmpTime1) < 0) {
+                        String tmpRet = "{" +
+                                "   \"ret\" : \"-1\"," +
+                                "   \"desc\" :\" 文件不存在\" " +
+                                "}";
+                        mTutkSession.writeMessge(tmpRet);
+                    } else {
+                        String tmpRet = "{" +
+                                "   \"ret\" : \"0\"," +
+                                "   \"desc\" :\" \" " +
+                                "}";
+                        mTutkSession.writeMessge(tmpRet);
+                        //canel real time data
+                        AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                        VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                        //register history
+                        alertVideoManager.mExtrator.registerExtratorListener(mMediaTransfer);
+                    }
+
+
+                }
+                break;
+        }
+
+    }
+
+    private boolean isDoStopHistory(String aDateString) {
+        if (TextUtils.isEmpty(aDateString)) {
+            return true;
+        }
+
+        Log.d(TAG, "aDateString = " + aDateString);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        try {
+            Date tmpDate1 = sdf.parse(aDateString);
+            Date tmpDate2 = new Date(0);
+            Log.d(TAG, "tmpDate2 = " + tmpDate2 + " tmpDate1 = " + tmpDate1);
+            if (tmpDate1.getTime() <= tmpDate2.getTime()) {
+                Log.d(TAG, "无效时间参数，停止历史监控");
+                return true;
+            } else {
+                Log.d(TAG, "时间参数为 " + tmpDate1);
+                return false;
+            }
+
+        } catch (Exception e) {
+            Log.d(TAG, "dateFormat.parse Exception " + e.toString());
+            return true;
         }
 
     }

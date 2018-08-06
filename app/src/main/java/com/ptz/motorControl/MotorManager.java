@@ -21,6 +21,8 @@ public class MotorManager {
     private boolean stopFlag = true;
     private static final String Receiver_BroadCast_Filter = "com.foxconn.household.get.view";
     private static final String Send_BroadCast_Filter = "com.foxconn.household.request.view";
+    private static final int Normal_Speed = 500;
+    private static final int Slow_Speed = 250;
 
     private static MotorManager mManger = new MotorManager();
 
@@ -73,12 +75,21 @@ public class MotorManager {
         Thread moveLeftThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                if ("false".equals(isLongPressStr)) {
-                    sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                if (MotorCmd.DEVICE_POSE) {
+                    if ("false".equals(isLongPressStr)) {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                    } else {
+                        int maxStep = getHorizonMaxStep();
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                    }
                 } else {
-                    int maxStep = getHorizonMaxStep();
-                    sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                    if ("false".equals(isLongPressStr)) {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                    } else {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                    }
                 }
+
             }
         });
         moveLeftThread.start();
@@ -90,11 +101,21 @@ public class MotorManager {
         Thread moveRightThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                if ("false".equals(isLongPressStr)) {
-                    sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                if (MotorCmd.DEVICE_POSE) {
+                    if ("false".equals(isLongPressStr)) {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                    } else {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                    }
                 } else {
-                    sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                    if ("false".equals(isLongPressStr)) {
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                    } else {
+                        int maxStep = getHorizonMaxStep();
+                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                    }
                 }
+
             }
         });
         moveRightThread.start();
@@ -106,13 +127,25 @@ public class MotorManager {
         Thread moveUpThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                if ("false".equals(isLongPressStr)) {
-                    int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
-                    Log.d(TAG, "moveUp:  " + ret);
+                if (MotorCmd.DEVICE_POSE) {
+                    if ("false".equals(isLongPressStr)) {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        Log.d(TAG, "moveUp:  " + ret);
+                    } else {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        Log.d(TAG, "moveUp long press:  " + ret);
+                    }
                 } else {
-                    int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
-                    Log.d(TAG, "moveUp long press:  " + ret);
+                    if ("false".equals(isLongPressStr)) {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        Log.d(TAG, "moveDown: " + ret);
+                    } else {
+                        int maxStep = getVerticalMaxStep();
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        Log.d(TAG, "moveDown: " + ret);
+                    }
                 }
+
             }
         });
         moveUpThread.start();
@@ -124,14 +157,25 @@ public class MotorManager {
         Thread moveDownThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                if ("false".equals(isLongPressStr)) {
-                    int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
-                    Log.d(TAG, "moveDown: " + ret);
+                if (MotorCmd.DEVICE_POSE) {
+                    if ("false".equals(isLongPressStr)) {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        Log.d(TAG, "moveDown: " + ret);
+                    } else {
+                        int maxStep = getVerticalMaxStep();
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        Log.d(TAG, "moveDown: " + ret);
+                    }
                 } else {
-                    int maxStep = getVerticalMaxStep();
-                    int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
-                    Log.d(TAG, "moveDown: " + ret);
+                    if ("false".equals(isLongPressStr)) {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        Log.d(TAG, "moveUp:  " + ret);
+                    } else {
+                        int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        Log.d(TAG, "moveUp long press:  " + ret);
+                    }
                 }
+
             }
         });
         moveDownThread.start();
@@ -149,7 +193,7 @@ public class MotorManager {
         movePositionThread.start();
     }
 
-    private int moveSyncPosition(int horizontal,int vertical){
+    private int moveSyncPosition(int horizontal, int vertical) {
         int ret;
         int ret1 = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, horizontal);
         int ret2 = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, vertical);
@@ -157,7 +201,7 @@ public class MotorManager {
             ret = 1;
         else
             ret = -1;
-        return  ret;
+        return ret;
     }
 
 //    public int[] getPosition() {
@@ -184,31 +228,24 @@ public class MotorManager {
     }
 
     public void startHorizontalPath(){
-        if (startVericalThread != null){
-            startVericalThread.interrupt();
-            startVericalThread = null;
-            stopFlag = true;
+        stopPath();
+        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Slow_Speed) >= 0){
+            LogTool.d(TAG,"set horizintal motor Frequency success");
         }
-        if (startPathThread != null){
-            startPathThread.interrupt();
-            startPathThread = null;
-            stopFlag = true;
-        }
-        if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath success");
-        }else {
-            LogTool.e(TAG,"stopPath failed");
-        }
-        if (startHoriziontalThread == null){
+        if (startHoriziontalThread == null) {
             startHoriziontalThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     stopFlag = false;
                     while(!stopFlag){
                         int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        if (Thread.interrupted())
+                            return;
                         if (ret >= 0){
                             int maxStep = getHorizonMaxStep();
                             int ret2 = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                            if (Thread.interrupted())
+                                return;
                             if (ret2 >= 0){
                                 LogTool.d(TAG,"startHorizontalPath success");
                             }else {
@@ -231,20 +268,9 @@ public class MotorManager {
     }
 
     public void startVerticalPath(){
-        if (startHoriziontalThread != null){
-            startHoriziontalThread.interrupt();
-            startHoriziontalThread = null;
-            stopFlag = true;
-        }
-        if (startPathThread != null){
-            startPathThread.interrupt();
-            startPathThread = null;
-            stopFlag = true;
-        }
-        if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath success");
-        }else {
-            LogTool.e(TAG,"stopPath failed");
+        stopPath();
+        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Slow_Speed) >= 0){
+            LogTool.d(TAG,"set horizintal motor Frequency success");
         }
         if (startVericalThread == null)
         {
@@ -254,9 +280,13 @@ public class MotorManager {
                     stopFlag = false;
                     while(!stopFlag){
                         int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        if (Thread.interrupted())
+                            return;
                         if (ret >= 0){
                             int maxStep = getVerticalMaxStep();
                             int ret2 = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                            if (Thread.interrupted())
+                                return;
                             if (ret2 >= 0){
                                 LogTool.d(TAG,"startVerticalPath success");
                             }else {
@@ -285,21 +315,7 @@ public class MotorManager {
     private ArrayList<PathPosition> pathPositionsArrayList = null;
 
     public void starPath(final ArrayList<PathPosition> arrayList) {
-        if (startVericalThread != null){
-            startVericalThread.interrupt();
-            startVericalThread = null;
-            stopFlag = true;
-        }
-        if (startHoriziontalThread != null){
-            startHoriziontalThread.interrupt();
-            startHoriziontalThread = null;
-            stopFlag = true;
-        }
-        if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath success");
-        }else {
-            LogTool.e(TAG,"stopPath failed");
-        }
+        stopPath();
 
         pathPositionsArrayList = arrayList;
         if (startPathThread == null) {
@@ -310,14 +326,14 @@ public class MotorManager {
 //                    LogTool.d(TAG,"x ="+arrayList.get(0).xAxis+",y= "+arrayList.get(0).yAxis+",sleepTime="+arrayList.get(0).sleepTime);
                     if (moveSyncPosition(arrayList.get(0).xAxis, arrayList.get(0).yAxis) >= 0){
                         LogTool.d(TAG,"starPath move to 0 position success");
-                        if (Thread.interrupted())
-                            return;
                     }else {
                         stopFlag = true;
                         startPathThread = null;
                         LogTool.d(TAG,"starPath error");
                         return;
                     }
+                    if (Thread.interrupted())
+                        return;
                     try {
                         Thread.sleep(arrayList.get(0).sleepTime);
                     } catch (InterruptedException e) {
@@ -328,6 +344,8 @@ public class MotorManager {
                     }
                     while (!stopFlag) {
                         for (int i = 1; i < arrayList.size(); i++) {
+                            if (Thread.interrupted())
+                                return;
                             if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0){
                                 LogTool.d(TAG,"starPath move to "+i+" position success, xAxis="+arrayList.get(i).xAxis+",yAxis="+arrayList.get(i).yAxis);
                             }else {
@@ -336,17 +354,21 @@ public class MotorManager {
                                 startPathThread = null;
                                 return;
                             }
+                            if (Thread.interrupted())
+                                return;
                             try {
                                 Thread.sleep(arrayList.get(i).sleepTime);
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
                                 stopFlag = true;
                                 startPathThread = null;
-                                LogTool.d(TAG,"startPath stop sleep");
+                                LogTool.d(TAG, "startPath stop sleep");
                                 return;
                             }
                         }
                         for (int i = arrayList.size() - 1; i >= 0; i--) {
+                            if (Thread.interrupted())
+                                return;
                             if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0){
                                 LogTool.d(TAG,"starPath move to "+i+" position success");
                             }else {
@@ -355,6 +377,8 @@ public class MotorManager {
                                 startPathThread = null;
                                 return;
                             }
+                            if (Thread.interrupted())
+                                return;
                             try {
                                 Thread.sleep(arrayList.get(i).sleepTime);
                             } catch (InterruptedException e) {
@@ -373,11 +397,11 @@ public class MotorManager {
 
     public void stopPath() {
         stopFlag = true;
-        if (startHoriziontalThread != null){
+        if (startHoriziontalThread != null) {
             startHoriziontalThread.interrupt();
             startHoriziontalThread = null;
         }
-        if (startVericalThread != null){
+        if (startVericalThread != null) {
             startVericalThread.interrupt();
             startVericalThread = null;
         }
@@ -387,9 +411,25 @@ public class MotorManager {
             pathPositionsArrayList = null;
         }
         if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath success");
+            LogTool.d(TAG,"stopPath  HORIZONTAL_MOTOR success");
         }else {
-            LogTool.e(TAG,"stopPath failed");
+            LogTool.e(TAG,"stopPath VERTICAL_MOTOR  failed");
+        }
+        if(sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
+            LogTool.d(TAG,"stopPath VERTICAL_MOTOR  success");
+        }else {
+            LogTool.e(TAG,"stopPath  VERTICAL_MOTOR failed");
+        }
+
+        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
+            LogTool.d(TAG,"set horizintal motor Frequency success");
+        }else {
+            LogTool.e(TAG,"set horizintal motor Frequency  failed");
+        }
+        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
+            LogTool.d(TAG,"set vertical motor Frequency success");
+        }else {
+            LogTool.e(TAG,"set vertical motor Frequency  failed");
         }
     }
 
@@ -463,9 +503,9 @@ public class MotorManager {
                         int yMoveBefore = getVerticalCurrenStep();
                         Message msg = Message.obtain();
 
-                        if (moveSyncPosition(xAxis,yAxis) >= 0)
-                            LogTool.d(TAG,"WorkThread moveSyncPosition  destination  success ");
-                        else{
+                        if (moveSyncPosition(xAxis, yAxis) >= 0)
+                            LogTool.d(TAG, "WorkThread moveSyncPosition  destination  success ");
+                        else {
                             //send error
                             msg.what = -1;
                             handler.sendMessage(msg);
@@ -481,20 +521,21 @@ public class MotorManager {
                             e.printStackTrace();
                         }
                         //3.turn to origin
-                        if (moveSyncPosition(xMoveBefore,yMoveBefore) >= 0)
-                            LogTool.d(TAG,"WorkThread moveSyncPosition  origin  success ");
-                        else{
+                        if (moveSyncPosition(xMoveBefore, yMoveBefore) >= 0)
+                            LogTool.d(TAG, "WorkThread moveSyncPosition  origin  success ");
+                        else {
                             msg.what = -1;
                             handler.sendMessage(msg);
                         }
-                    } else {                 //path moving
-                        if (startHoriziontalThread != null){
+                    } else {
+                        //path stop begin
+                        if (startHoriziontalThread != null) {
                             startHoriziontalThread.interrupt();
                             startHoriziontalThread = null;
                             stopFlag = true;
                             pathFlag = 1;
                         }
-                        if (startVericalThread != null){
+                        if (startVericalThread != null) {
                             startVericalThread.interrupt();
                             startVericalThread = null;
                             stopFlag = true;
@@ -506,15 +547,32 @@ public class MotorManager {
                             stopFlag = true;
                             pathFlag = 3;
                         }
-                        if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-                            LogTool.d(TAG,"stopPath success");
-                        }else {
-                            LogTool.e(TAG,"stopPath failed");
+                        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0) {
+                            LogTool.d(TAG, "stopPath success");
+                        } else {
+                            LogTool.e(TAG, "stopPath failed");
                         }
+                        if(sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
+                            LogTool.d(TAG,"stopPath VERTICAL_MOTOR  success");
+                        }else {
+                            LogTool.e(TAG,"stopPath  VERTICAL_MOTOR failed");
+                        }
+                        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
+                            LogTool.d(TAG,"set horizintal motor Frequency success");
+                        }else {
+                            LogTool.e(TAG,"set horizintal motor Frequency  failed");
+                        }
+                        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
+                            LogTool.d(TAG,"set vertical motor Frequency success");
+                        }else {
+                            LogTool.e(TAG,"set vertical motor Frequency  failed");
+                        }
+                        //path stop end
+
                         Message msg = Message.obtain();
-                        if (moveSyncPosition(xAxis,yAxis) >= 0)
-                            LogTool.d(TAG,"WorkThread moveSyncPosition  destination  success ");
-                        else{
+                        if (moveSyncPosition(xAxis, yAxis) >= 0)
+                            LogTool.d(TAG, "WorkThread moveSyncPosition  destination  success ");
+                        else {
                             msg.what = -1;
                             handler.sendMessage(msg);
                             return;

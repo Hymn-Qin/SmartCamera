@@ -2,24 +2,65 @@ package com.zzdc.abb.smartcamera.controller;
 
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.tutk.IOTC.AVFrame;
+import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.FrameInfo;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
+import com.zzdc.abb.smartcamera.info.VideoFileInfo;
+import com.zzdc.abb.smartcamera.util.BufferPool;
+import com.zzdc.abb.smartcamera.util.ByteToHexTool;
+import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.WriteToFileTool;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class HistoryManager {
 
     private static final String TAG = HistoryManager.class.getSimpleName();
     private static final HistoryManager mInstance = new HistoryManager();
     private WriteToFileTool mTool;
+    private String mDestFile = null;
+    private Boolean mIsWorking = false;
+    private SDCardBussiness mSDCardBussiness;
+    public static byte[] PPS;
+    private long mVideoSatrtTimeStamp;   //视频内部时间
+    private long mVideoStartTime;        //视频文件时间
+    private long mDestTime;
+    private ArrayList<File> mFiles;
+
+    private BufferPool<TutkFrame> mVideoBufPool = new BufferPool<>(TutkFrame.class, 3);
+    private BufferPool<TutkFrame> mAudioBufPool = new BufferPool<>(TutkFrame.class, 3);
+
+    private LinkedBlockingQueue<TutkFrame> mVideoQueue = new LinkedBlockingQueue<>();
+    private LinkedBlockingQueue<TutkFrame> mAudioQueue = new LinkedBlockingQueue<>();
+    private CopyOnWriteArrayList<AvMediaTransfer.AvTransferLister> mAvTransferListers = new CopyOnWriteArrayList<>();
+    private boolean isDoSend = false;
+
+    private Thread mVideoSendThread;
+    private Thread mAudioSendThread;
+    private MediaExtractor mVideoExtractor;
+    private MediaExtractor mAudioExtractor;
+
+    public MP4Extrator mExtrator;
+
     private HistoryManager(){
 
     }
@@ -28,177 +69,236 @@ public class HistoryManager {
         return mInstance;
     }
 
-    public void sendAudioVideo(){
-        Log.d(TAG,"sendAudioVideo");
-        mTool = new WriteToFileTool();
-        mTool.prepare();
-        File file = new File(Constant.DIRCTORY + '/'+"test.mp4");
-        if (file == null || ! file.exists() || file.length() == 0) {
-            Log.d(TAG,"文件不存在");
-            return;
-        }else {
-            MediaExtractor videoExtractor = new MediaExtractor();
-            MediaExtractor audioExtractor = new MediaExtractor();
-            int videoIndex = -1;
-            //源文件
+    public void registerAvTransferListener(AvMediaTransfer.AvTransferLister listener) {
+        LogTool.d(TAG,"transferlisterners count:"+mAvTransferListers.size());
+
+        if (!mAvTransferListers.contains(listener)) {
+            LogTool.d(TAG,"transferlisterners count: add");
+            mAvTransferListers.add(listener);
+        }
+    }
+
+    public void unRegisterAvTransferListener(AvMediaTransfer.AvTransferLister listener) {
+        LogTool.d(TAG,"transferlisterners count: remove");
+        mAvTransferListers.remove(listener);
+    }
+
+    private void sortFile(){
+        mSDCardBussiness = SDCardBussiness.getInstance();
+        String videoRootPath = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM/";
+        ArrayList<File>tmpFiles = new ArrayList<>();
+        getFiles(tmpFiles ,videoRootPath ,".mp4");
+
+        if(tmpFiles != null &&tmpFiles.size()>0){
+            Collections.sort(tmpFiles, new Comparator<File>() {
+                @Override
+                public int compare(File o1, File o2) {
+
+                    if(o1.isDirectory()&&o2.isFile())
+                        return -1;
+                    if(o1.isFile()&&o2.isDirectory())
+                        return 1;
+                    return o2.getName().compareTo(o1.getName());
+                }
+            });
+        }
+
+
+        mFiles = tmpFiles;
+    }
+
+    public ArrayList<String> getHistoryVideoFileInfo(){
+
+        ArrayList<String> tmpRet = new ArrayList<>();
+        JSONObject tmpRes = new JSONObject();
+        mSDCardBussiness = SDCardBussiness.getInstance();
+        if(!mSDCardBussiness.isSDCardAvailable()){
             try {
-                videoExtractor.setDataSource(Constant.DIRCTORY + '/' + "test.mp4");
-                audioExtractor.setDataSource(Constant.DIRCTORY + '/' + "test.mp4");
-                //信道总数
-                int videoTrackCount = videoExtractor.getTrackCount();
-                int audioTrackCount = audioExtractor.getTrackCount();
+                tmpRes.put("type", "getHistoryInfoList");
+                tmpRes.put("ret", "-1");
+            }catch (Exception e){
+                Log.d(TAG," Exception " + e.toString());
+            }
+            tmpRet.add(tmpRes.toString());
+            return tmpRet;
+        }
 
-                int audioTrackIndex = -1;
-                int videoTrackIndex = -1;
+        ArrayList<VideoFileInfo> tmpInfos = new ArrayList<>();
+        sortFile();
+        JSONArray tmpJson = new JSONArray();
 
-                for (int i = 0; i < videoTrackCount; i++) {
-                    MediaFormat trackFormat = videoExtractor.getTrackFormat(i);
-                    String mineType = trackFormat.getString(MediaFormat.KEY_MIME);
-                    //视频信道
-                    if (mineType.startsWith("video/")) {
-                        videoTrackIndex = i;
-                    }
+        for (int i = 0; i< mFiles.size(); i++){
+            VideoFileInfo tmpFileInfo = new VideoFileInfo();
+            String tmpTime = mFiles.get(i).getName().substring(mFiles.get(i).getName().lastIndexOf("VID_") + 4, mFiles.get(i).getName().indexOf(".mp4"));
+            tmpFileInfo.setFileName(mFiles.get(i).getName());
+//            Log.d(TAG,"tmpTime " + tmpTime);
+            DateFormat tmpFormat1 = new SimpleDateFormat("yyyyMMdd_HHmmss");
+            SimpleDateFormat tmpDateFormat2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+            try {
+                Date tmpDate = tmpFormat1.parse(tmpTime);
+                tmpFileInfo.setStartTime(tmpDateFormat2.format(tmpDate));
+                JSONObject tmpObj = new JSONObject();
+                tmpObj.put("Date", tmpFileInfo.getStartTime());
+                tmpJson.put(tmpObj);
+//                Log.d(TAG,"tmpJson.toString().length() " + tmpJson.toString().length());
+
+                if(i%25 == 0 ||i == (mFiles.size() - 1)){
+                    tmpRes.put("type", "getHistoryInfoList");
+                    tmpRes.put("ret", "0");
+                    tmpRes.put("DateArray", tmpJson);
+                    tmpRet.add(tmpRes.toString());
+                    tmpRes.remove("type");
+                    tmpRes.remove("ret");
+                    tmpRes.remove("DateArray");
+                    tmpJson = null;
+                    tmpJson = new JSONArray();
                 }
-                for (int i = 0; i < audioTrackCount; i++) {
-                    MediaFormat trackFormat = audioExtractor.getTrackFormat(i);
-                    String mineType = trackFormat.getString(MediaFormat.KEY_MIME);
-                    //音频信道
-                    if (mineType.startsWith("audio/")) {
-                        audioTrackIndex = i;
-                    }
-                }
-                ByteBuffer audioByteBuffer = ByteBuffer.allocate(500 * 1024);
-                ByteBuffer videoByteBuffer = ByteBuffer.allocate(500 * 1024);
-                Log.d(TAG,"sendAudioVideo 0");
-                while (true) {
-                    //切换到视频信道
-                    videoExtractor.selectTrack(videoTrackIndex);
-                    //切换到音频信道
-                    audioExtractor.selectTrack(audioTrackIndex);
-                    int i = 0;
-                    while (true) {
-                        Log.d(TAG,"sendAudioVideo i=" + i++);
-                        int videoReadSampleCount = videoExtractor.readSampleData(videoByteBuffer, 0);
-                        int audioReadSampleCount = audioExtractor.readSampleData(audioByteBuffer, 0);
-                        if (videoReadSampleCount < 0) {
-                            break;
-                        }
-                        //保存视频信道信息
-                        byte[] videoBuffer = new byte[videoReadSampleCount];
-                        videoByteBuffer.get(videoBuffer);
 
-                        mTool.write(videoBuffer);
-                        FrameInfo tmpInfo = new FrameInfo();
-                        tmpInfo.codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
-                        tmpInfo.timestamp = System.currentTimeMillis();
-
-                        TutkFrame tmpFrame = new TutkFrame();
-                        //tmpFrame.setData(videoBuffer);
-                        //tmpFrame.setFrameInfo(tmpInfo);
-//                        mRealTimeMonitor.sendVideoData(tmpFrame);
-
-                        videoByteBuffer.clear();
-
-                        //保存音频信道信息
-                        byte[] audioBuffer = new byte[audioReadSampleCount];
-                        audioByteBuffer.get(audioBuffer);
-
-                        FrameInfo audioTmpInfo = new FrameInfo();
-                        audioTmpInfo.codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
-                        audioTmpInfo.timestamp = System.currentTimeMillis();
-
-                        TutkFrame audioTmpFrame = new TutkFrame();
-                        //tmpFrame.setData(audioBuffer);
-                        //tmpFrame.setFrameInfo(audioTmpInfo);
-
-                        audioByteBuffer.clear();
-
-                        videoExtractor.advance();//移动到下一帧
-                        audioExtractor.advance();//移动到下一帧
-                    }
-                }
             } catch (Exception e) {
-                e.printStackTrace();
-                Log.d(TAG,"sendAudioVideo e="+e.getMessage());
+                Log.d(TAG,"format1.parse ParseException " + e);
             }
         }
+
+//        Log.d(TAG,"all file info " + tmpRet.toString());
+        return tmpRet;
+    }
+    /*
+     * 功能：根据时间参数寻找文件
+     * 参数：aTime
+     * 返回值：
+     * */
+    public String searchVideoFile(String aTime){
+        String tmpSearchFile = null;
+        if(TextUtils.isEmpty(aTime)){
+            Log.d(TAG, "searchVideo aTime ==null");
+            return tmpSearchFile;
+
+        }
+        Log.d(TAG,"aTime = " + aTime);
+        mSDCardBussiness = SDCardBussiness.getInstance();
+        if(!mSDCardBussiness.isSDCardAvailable()){
+            Log.d(TAG,"SDCard not Available");
+            return tmpSearchFile;
+        }
+
+        Date tmpDate;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        SimpleDateFormat tmpDateFormat = new SimpleDateFormat("'VID'_yyyyMMdd_HHmmss'.mp4'");
+        String tmpFileName = null;
+        try{
+            tmpDate = sdf.parse(aTime);
+            Log.d(TAG,"tmpDate = " + tmpDate );
+            mDestTime = tmpDate.getTime();
+            tmpFileName = tmpDateFormat.format(tmpDate);
+            Log.d(TAG,"tmpFileName = " + tmpFileName );
+        }catch(Exception e){
+            Log.d(TAG,"dateFormat.parse Exception " + e.toString());
+        }
+
+        getHistoryVideoFileInfo();
+
+        for(int i = 0; i < mFiles.size(); i++){
+
+            if(mFiles.get(i).getName().compareTo(tmpFileName) == 0 ){
+                tmpSearchFile = mFiles.get(i).getName();
+                Log.d(TAG,"search file just begin time equal para  " + mFiles.get(i).getName());
+                break;
+            }
+            if(i == mFiles.size() - 1)
+                break;
+
+            if(mFiles.get(i).getName().compareTo(tmpFileName) >= 0 &&(mFiles.get(i + 1).getName().compareTo(tmpFileName) < 0)){
+                tmpSearchFile = mFiles.get(i + 1).getName();
+                Log.d(TAG,"search file is " + mFiles.get(i + 1).getName());
+                break;
+            }
+        }
+        Log.d(TAG," SearchFile  = " + tmpSearchFile);
+        return tmpSearchFile;
+
     }
 
-    private void extractorMedia() {
-        FileOutputStream videoOutputStream = null;
-        FileOutputStream audioOutputStream = null;
-        MediaExtractor mediaExtractor = new MediaExtractor();
+    private void setVideoSatrtTime() {
+        if (TextUtils.isEmpty(mDestFile)) {
+            return;
+        }
+
+
+        String tmpTime =mDestFile.substring(mDestFile.lastIndexOf("VID_") + 4,mDestFile.indexOf(".mp4"));
+        Log.d(TAG,"mDestFile " + mDestFile);
+        DateFormat format1 = new SimpleDateFormat("yyyyMMdd_HHmmss");
         try {
-            //分离的视频文件
-            File videoFile = new File(Constant.DIRCTORY, "output_video.mp4");
-            //分离的音频文件
-            File audioFile = new File(Constant.DIRCTORY, "output_audio.mp3");
-            videoOutputStream = new FileOutputStream(videoFile);
-            audioOutputStream = new FileOutputStream(audioFile);
-            //源文件
-            mediaExtractor.setDataSource(Constant.DIRCTORY + '/'+"test.mp4");
-            //信道总数
-            int trackCount = mediaExtractor.getTrackCount();
-            int audioTrackIndex = -1;
-            int videoTrackIndex = -1;
-            for (int i = 0; i < trackCount; i++) {
-                MediaFormat trackFormat = mediaExtractor.getTrackFormat(i);
-                String mineType = trackFormat.getString(MediaFormat.KEY_MIME);
-                //视频信道
-                if (mineType.startsWith("video/")) {
-                    videoTrackIndex = i;
-                }
-                //音频信道
-                if (mineType.startsWith("audio/")) {
-                    audioTrackIndex = i;
-                }
-            }
-
-            ByteBuffer byteBuffer = ByteBuffer.allocate(500 * 1024);
-            //切换到视频信道
-            mediaExtractor.selectTrack(videoTrackIndex);
-            while (true) {
-                int readSampleCount = mediaExtractor.readSampleData(byteBuffer, 0);
-                if (readSampleCount < 0) {
-                    break;
-                }
-                //保存视频信道信息
-                byte[] buffer = new byte[readSampleCount];
-                byteBuffer.get(buffer);
-                ///////////////
+            Date tmpDate = format1.parse(tmpTime);
+            mVideoStartTime = tmpDate.getTime();
+            Log.d(TAG,"mVideoSatrtTime = " + mVideoStartTime);
+        } catch (ParseException e) {
+            Log.d(TAG,"format1.parse ParseException " + e);
+        }
 
 
-                videoOutputStream.write(buffer);
-                byteBuffer.clear();
-                mediaExtractor.advance();
-            }
-            //切换到音频信道
-            mediaExtractor.selectTrack(audioTrackIndex);
-            while (true) {
-                int readSampleCount = mediaExtractor.readSampleData(byteBuffer, 0);
-                if (readSampleCount < 0) {
-                    break;
-                }
-                //保存音频信息
-                byte[] buffer = new byte[readSampleCount];
-                byteBuffer.get(buffer);
-                audioOutputStream.write(buffer);
-                byteBuffer.clear();
-                mediaExtractor.advance();
-            }
+    }
+    private void getFiles(ArrayList<File> fileList, String path, String aExtension) {
+        File[] allFiles = new File(path).listFiles();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-            Log.e(TAG,"exactorMedia IO e="+e.getMessage());
-        } finally {
-            mediaExtractor.release();
-            try {
-                videoOutputStream.close();
-                audioOutputStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.e(TAG,"exactorMedia e="+e.getMessage());
+        if(allFiles == null ||allFiles.length == 0){
+            return;
+        }
+        for (int i = 0; i < allFiles.length; i++) {
+            File file = allFiles[i];
+            if (file.isFile()) {
+                if (file.getPath().substring(file.getPath().length() - aExtension.length()).equals(aExtension))
+                    fileList.add(file);
+            } else if (!file.getAbsolutePath().contains(".thumnail")) {
+                getFiles(fileList, file.getAbsolutePath(), aExtension);
             }
         }
     }
+    /*
+     * 处理历史视频指令
+     *
+     * **/
+    public int handleHistoryVideo(String aDate){
+        Log.d(TAG,"handleHistoryVideo");
+        if (TextUtils.isEmpty(aDate)){
+//            mDestFile = searchVideoFile("2018-07-14 15:28:49");
+//            mDestFile = searchVideoFile("2018-07-17 19:29:50");
+//            mDestFile = searchVideoFile("2018-07-17 19:54:06");
+            mDestFile = searchVideoFile("2018-07-17 19:59:10");
+        }else {
+
+            mDestFile = searchVideoFile(aDate);
+//            mDestFile = searchVideoFile("2018-07-17 19:30:10");
+        }
+        Log.d(TAG,"aDate = " + aDate);
+        if(TextUtils.isEmpty(mDestFile)){
+            return -1;
+        }
+        setVideoSatrtTime();
+        mDestFile = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM" + "/" + mDestFile;
+
+        if (mExtrator!= null){
+            mExtrator.stop();
+            mExtrator = null;
+        }
+
+        mExtrator = new MP4Extrator(mDestFile, mDestTime, mVideoStartTime);
+        int tmpResult = mExtrator.init();
+        Log.d(TAG,"mExtrator.init " + tmpResult);
+        if(tmpResult == 0){
+            mExtrator.start();
+        }
+        return 0;
+
+    }
+
+    public void release(){
+
+        mExtrator.stop();
+        mExtrator = null;
+    }
+
+
+
+
 }

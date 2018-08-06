@@ -4,32 +4,30 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 public class ApplicationSetting {
+    private static final String PREFERENCE = "com.zzdc.abb.smartcamera";
+    private static final String MONITOR_STATE = "monitor_state";
+
     private static ApplicationSetting mAplicationSetting = new ApplicationSetting();
     private Context mContext;
-    public static final String PREFRENCE = "com.zzdc.abb.smartcamera";
-    public void SetContext(Context context){
 
-        this.mContext =  context;
-
-    }
     public static ApplicationSetting getInstance(){
         return mAplicationSetting;
-
     }
 
-    private SharedPreferences mSharedPreferences;
-    private SharedPreferences.Editor mEditor;
+    public void SetContext(Context context){
+        this.mContext =  context;
+    }
+
     public  boolean getSystemMonitorSetting(){
-        mSharedPreferences = mContext.getSharedPreferences(PREFRENCE, Context.MODE_PRIVATE);
-        mEditor = mSharedPreferences.edit();
-        return mSharedPreferences.getBoolean("isOpenMonitor", false);
+        SharedPreferences preference = mContext.getSharedPreferences(PREFERENCE, Context.MODE_PRIVATE);
+        return preference.getBoolean(MONITOR_STATE, true);
     }
 
     public void setSystemMonitorSetting(boolean aIsEnable){
-        mSharedPreferences = mContext.getSharedPreferences(PREFRENCE, Context.MODE_PRIVATE);
-        mEditor = mSharedPreferences.edit();
-        mEditor.putBoolean("isOpenMonitor", aIsEnable);
-        mEditor.commit();
+        SharedPreferences preference = mContext.getSharedPreferences(PREFERENCE, Context.MODE_PRIVATE);
+        SharedPreferences.Editor edit = preference.edit();
+        edit.putBoolean(MONITOR_STATE, aIsEnable);
+        edit.apply();
     }
 }
 

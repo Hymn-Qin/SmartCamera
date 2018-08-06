@@ -27,7 +27,7 @@ public class LogTool {
     private static final int LOG_ERROR = 4;
 
     private static final int LOG_LEVEL = LOG_VERBOSE;
-    private static boolean LOG_TO_FILE = true;
+    private static boolean LOG_TO_FILE = false;
 
     public static void v(String tag, String msg) {
         v(tag, msg, null);

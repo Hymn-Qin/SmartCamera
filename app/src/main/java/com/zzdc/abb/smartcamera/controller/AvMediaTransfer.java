@@ -14,7 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener {
+public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener ,MP4Extrator.ExtratorDataListenner{
     private static final String TAG = AvMediaTransfer.class.getSimpleName();
     private static final boolean DEBUG = false;
 
@@ -26,7 +26,6 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
     private Thread mVideoDataSendThread;
     private Thread mAudioDataSendThread;
 
-    private static AvMediaTransfer avMediaTransfer = new AvMediaTransfer();
 
     private CopyOnWriteArrayList<AvTransferLister> mAvTransferListers = new CopyOnWriteArrayList<>();
 
@@ -44,14 +43,24 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         mAvTransferListers.remove(listener);
     }
 
+    @Override
+    public void onExtratorVideoDataReady(TutkFrame aFrame) {
+
+        aFrame.increaseRef();
+        mVideoQueue.offer(aFrame);
+    }
+
+    @Override
+    public void onExtratorAudioDataReady(TutkFrame aFrame) {
+        aFrame.increaseRef();
+        mAudioQueue.offer(aFrame);
+    }
+
     public interface AvTransferLister {
         public void sendVideoTutkFrame(TutkFrame tutkFrame);
         public void sendAudioTutkFrame(TutkFrame tutkFrame);
     }
 
-    public static AvMediaTransfer getInstance() {
-        return avMediaTransfer;
-    }
 
     public void startAvMediaTransfer(){
         mAudioQueue.clear();
@@ -59,6 +68,8 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         mVideoDataSendThread = new Thread(new VideoSendThread());
         mVideoDataSendThread.start();
         mAudioDataSendThread = new Thread(new AudioSendThread());
+        mAudioBufPool.setDebug(DEBUG);
+        mVideoBufPool.setDebug(DEBUG);
         mAudioDataSendThread.start();
     }
 
@@ -71,13 +82,13 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
 
     @Override
     public void onAudioEncoded(EncoderBuffer buf) {
-        int dataLen = buf.getOutputBufferInfo().size + 7;
+        int dataLen = buf.getBufferInfo().size + 7;
         TutkFrame frame = mAudioBufPool.getBuf(dataLen);
         frame.setDataLen(dataLen);
         addADTStoPacket(frame.getData(), dataLen);
-        buf.getOutputBuffer().get(frame.getData(),7, buf.getOutputBufferInfo().size);
-        frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
-        frame.getFrameInfo().timestamp = System.currentTimeMillis();
+        buf.getByteBuffer().get(frame.getData(),7, buf.getBufferInfo().size);
+        frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
+//        frame.getFrameInfo().timestamp = "1970-01-01 08:00:00";
 
         try {
             mAudioQueue.put(frame);
@@ -93,34 +104,35 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
 
     @Override
     public void onVideoEncoded(EncoderBuffer buf) {
-        ByteBuffer tmpOutBuf = buf.getOutputBuffer();
+        ByteBuffer tmpOutBuf = buf.getByteBuffer();
 
         TutkFrame frame = null;
         int type = tmpOutBuf.get(4) & 0x1F;
         if (type == 5 && Constant.PPS != null && Constant.PPS.length > 0) {
-            int dataLen = Constant.PPS.length + buf.getOutputBufferInfo().size;
+            int dataLen = Constant.PPS.length + buf.getBufferInfo().size;
             frame = mVideoBufPool.getBuf(dataLen);
             frame.setDataLen(dataLen);
             System.arraycopy(Constant.PPS, 0, frame.getData(), 0, Constant.PPS.length);
             try {
-                tmpOutBuf.get(frame.getData(), Constant.PPS.length, buf.getOutputBufferInfo().size);
+                tmpOutBuf.get(frame.getData(), Constant.PPS.length, buf.getBufferInfo().size);
             } catch (Exception e) {
                 Log.e(TAG, "Copy PPS and data with exception.", e);
             }
-            frame.getFrameInfo().flags = AVFrame.IPC_FRAME_FLAG_IFRAME;
+//            frame.getFrameInfo().flags = AVFrame.IPC_FRAME_FLAG_IFRAME;
         } else {
-            int dataLen = buf.getOutputBufferInfo().size;
+            int dataLen = buf.getBufferInfo().size;
             frame = mVideoBufPool.getBuf(dataLen);
             frame.setDataLen(dataLen);
             try {
-                tmpOutBuf.get(frame.getData(), 0, buf.getOutputBufferInfo().size);
+                tmpOutBuf.get(frame.getData(), 0, buf.getBufferInfo().size);
             } catch (Exception e) {
                 Log.e(TAG, "Copy data with exception.", e);
             }
         }
 
         frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
-        frame.getFrameInfo().timestamp = System.currentTimeMillis();
+//        frame.getFrameInfo().mType = "H264";
+//        frame.getFrameInfo().timestamp = "1970-01-01 08:00:00";
 
         try {
             mVideoQueue.put(frame);
@@ -169,7 +181,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
                     tmpFrame = mAudioQueue.take();
                     if (tmpFrame != null) {
                         synchronized (mAvTransferListers) {
-                            debug("mAvTransferListers  = " + mAvTransferListers.size());
+                            debug("mAvTransferListers .size = " + mAvTransferListers.size());
                             for (AvTransferLister avTransferLister : mAvTransferListers) {
                                 avTransferLister.sendAudioTutkFrame(tmpFrame);
                             }
@@ -231,6 +243,6 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
     }
 
     private void debug(String msg) {
-        if (DEBUG) LogTool.d(TAG, msg);
+        if (DEBUG || MainActivity.TRANSFER_DEBUG) LogTool.d(TAG, msg);
     }
 }

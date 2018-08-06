@@ -46,41 +46,68 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
     {
         mEncoderThread.start();
     }
-
-    private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
+    private Handler mEncodeHandler = new Handler(mEncoderThread.getLooper()) {
         @Override
-        public void onInputBufferAvailable(@NonNull MediaCodec mediaCodec, int i) {
-            debug("onInputBufferAvailable queue size = " + mAudioRawDataQueue.size() + ", buffer index = " + i);
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            try {
+                mEncoder = MediaCodec.createEncoderByType(AUDIO_MIME_TYPE);
+            } catch (IOException e) {
+                throw new RuntimeException("Create audio encoder failed!", e);
+            }
+        }
+    };
+
+    private HandlerThread mInputThread = new HandlerThread("Audio encode input thread");
+    {
+        mInputThread.start();
+    }
+    private Handler mInputHandler = new Handler(mInputThread.getLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            MediaCodec mediaCodec = (MediaCodec)msg.obj;
+            int i = msg.arg1;
             try {
                 AudioGather.AudioBuf audioRawBuf = mAudioRawDataQueue.take();
+                debug("Handle onInputBufferAvailable, buffer index = " + i);
                 ByteBuffer buffer = mediaCodec.getInputBuffer(i);
                 buffer.put(audioRawBuf.getData());
                 audioRawBuf.decreaseRef();
                 long pts = System.currentTimeMillis() * 1000 - mStartTime;
                 if (!mEncoding) {
-                    Log.d(TAG, "===send Video Encoder BUFFER_FLAG_END_OF_STREAM====");
+                    Log.d(TAG, "Send Audio Encoder with flag BUFFER_FLAG_END_OF_STREAM");
                     mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                    mAudioRawDataQueue.clear();
                 } else {
                     mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, 0);//TODO check the flag
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
-                //TODO
+                LogTool.w(TAG, "Take Audio raw data from queue with exception. ", e);
             }
+        }
+    };
+
+    private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
+        @Override
+        public void onInputBufferAvailable(@NonNull MediaCodec mediaCodec, int i) {
+            debug("onInputBufferAvailable, buffer index = " + i);
+            Message msg = new Message();
+            msg.obj = mediaCodec;
+            msg.arg1 = i;
+            mInputHandler.sendMessage(msg);
         }
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec mediaCodec, int i, @NonNull MediaCodec.BufferInfo bufferInfo) {
-            debug("onOutputBufferAvailable" + ", buffer index = " + i);
+            debug("onOutputBufferAvailable, buffer index = " + i);
             ByteBuffer buffer = mediaCodec.getOutputBuffer(i);
             if (mAudioEncoderListeners.size() > 0) {
-                EncoderBuffer buf = mEncodeBufPool.getBuf();
-                buf.setEncoder(mEncoder);
-                buf.setOutputBuffer(buffer);
-                buf.setOutputBufferInfo(bufferInfo);
-                buf.setOutputBufferIndex(i);
+                EncoderBuffer buf = mEncodeBufPool.getBuf(bufferInfo.size);
+                buf.put(buffer);
+                buf.getByteBuffer().position(0);
+                buf.setBufferInfo(bufferInfo);
                 buf.setTrack(AvMediaMuxer.TRACK_AUDIO);
-
                 for (AudioEncoderListener listener : mAudioEncoderListeners) {
                     listener.onAudioEncoded(buf);
                 }
@@ -103,18 +130,6 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
                 for (AudioEncoderListener listener : mAudioEncoderListeners) {
                     listener.onAudioFormatChanged(mediaFormat);
                 }
-            }
-        }
-    };
-
-    private Handler mEncodeHandler = new Handler(mEncoderThread.getLooper()) {
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            try {
-                mEncoder = MediaCodec.createEncoderByType(AUDIO_MIME_TYPE);
-            } catch (IOException e) {
-                throw new RuntimeException("Create audio encoder failed!", e);
             }
         }
     };
@@ -226,6 +241,6 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
     }
 
     private void debug(String msg) {
-        if (DEBUG) LogTool.d(TAG, msg);
+        if (DEBUG || MainActivity.AUDIO_ENCODE_DEBUG) LogTool.d(TAG, msg);
     }
 }

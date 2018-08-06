@@ -1,7 +1,6 @@
 package com.zzdc.abb.smartcamera.controller;
 
 import android.media.MediaCodec;
-import android.util.Log;
 
 import com.zzdc.abb.smartcamera.util.BufferPool;
 
@@ -9,43 +8,46 @@ import java.nio.ByteBuffer;
 
 public class EncoderBuffer extends BufferPool.Buf {
     private static final String TAG =  EncoderBuffer.class.getSimpleName();
-    private MediaCodec mEncoder;
-    private ByteBuffer mOutputBuffer;
-    private MediaCodec.BufferInfo mOutputBufferInfo;
-    private int mOutputBufferIndex;
+    private static final int ALIGN_EDGE = 1024 * 4;
 
+    private ByteBuffer mBuffer;
+    private MediaCodec.BufferInfo mBufferInfo;
     private int mTrack;
 
-    public void setEncoder(MediaCodec encoder) {
-        mEncoder = encoder;
+    public EncoderBuffer() {
+        mBuffer = ByteBuffer.allocate(ALIGN_EDGE);
     }
 
-    public MediaCodec getEncoder() {
-        return mEncoder;
+    @Override
+    protected void updateSize(int size) {
+        if (mBuffer.array().length < size) {
+            int allocateSize = size + ALIGN_EDGE;
+            allocateSize = allocateSize - allocateSize % ALIGN_EDGE;
+            mBuffer = ByteBuffer.allocate(allocateSize);
+        }
     }
 
-    public void setOutputBuffer(ByteBuffer buf) {
-        mOutputBuffer = buf;
+    @Override
+    protected void clear() {
+        mBuffer.clear();
     }
 
-    public ByteBuffer getOutputBuffer() {
-        return mOutputBuffer;
+    public void put(ByteBuffer buffer) {
+        if (buffer != null) {
+            mBuffer.put(buffer);
+        }
     }
 
-    public void setOutputBufferInfo(MediaCodec.BufferInfo info) {
-        mOutputBufferInfo = info;
+    public ByteBuffer getByteBuffer() {
+        return mBuffer;
     }
 
-    public MediaCodec.BufferInfo getOutputBufferInfo() {
-        return mOutputBufferInfo;
+    public void setBufferInfo(MediaCodec.BufferInfo info) {
+        mBufferInfo = info;
     }
 
-    public void setOutputBufferIndex(int i) {
-        mOutputBufferIndex = i;
-    }
-
-    public int getOutputBufferIndex() {
-        return mOutputBufferIndex;
+    public MediaCodec.BufferInfo getBufferInfo() {
+        return mBufferInfo;
     }
 
     public void setTrack(int track) {

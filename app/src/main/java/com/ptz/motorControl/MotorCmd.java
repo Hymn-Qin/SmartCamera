@@ -15,4 +15,6 @@ public class MotorCmd {
 
     public static final int HORIZONTAL_MOTOR = 0;
     public static final int VERTICAL_MOTOR = 1;
+
+    public static boolean DEVICE_POSE = false;
 }

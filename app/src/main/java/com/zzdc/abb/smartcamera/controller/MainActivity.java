@@ -8,27 +8,35 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.RelativeLayout;
+import android.widget.CompoundButton;
+import android.widget.Switch;
+import android.widget.Toast;
 
+import com.ptz.motorControl.MotorCmd;
+import com.ptz.motorControl.MotorDevicePose;
 import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.Device;
+import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.TUTKUIDUtil;
+import com.zzdc.abb.smartcamera.util.WindowUtils;
 
 import org.json.JSONObject;
 
@@ -38,11 +46,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, SurfacePreview.PermissionNotify {
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    private static final String TAG = MainActivity.class.getSimpleName();
 
-    private static final String TAG = "MainActivity";
     private SurfaceView mSurfaceView;
-    private SurfaceHolder mHolder;
     private Button btnStart;
     private Button btnCall;
     private SurfacePreview mSurfacePreview;
@@ -51,6 +58,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private TutkManager mTutk;
     private AvMediaRecorder mAvMediaRecorder = null;
+
     private static final int CallStateOff = 0;
     private static final int CallStateOn = 1;
     private OneKeyCallReciever mOneKeyCallReciever;
@@ -85,10 +93,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
         }
     };
+
     public static Context getContext(){
         return mContext;
     }
-
 
     public class OneKeyCallReciever extends BroadcastReceiver {
 
@@ -131,9 +139,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-
-
-
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode == 100){
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Settings.canDrawOverlays(this)) {
+                    WindowUtils.showPopupWindow(this);
+                    initUI();
+                    mMotorManager.initMotor();
+                    btnStart.setEnabled(true);
+                    startMonitorIfNeeded();
+                }else {
+                    Toast.makeText(this,"ACTION_MANAGE_OVERLAY_PERMISSION权限已被拒绝",Toast.LENGTH_SHORT).show();;
+                }
+            }
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -143,6 +165,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main2);
+        initDebug();
+
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
         mOneKeyCallReciever = new OneKeyCallReciever();
@@ -166,19 +190,27 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
    //     mAplicationSetting.setSystemMonitorSetting(true);
         mIsEnableMonitor = mAplicationSetting.getSystemMonitorSetting();
 
+        MotorDevicePose devicePose = MotorDevicePose.getInstance();
+        devicePose.SetContext(this);
+        MotorCmd.DEVICE_POSE = devicePose.getDevicePose();
 
-//        mSharedPreferences = getSharedPreferences(PREFRENCE, Context.MODE_PRIVATE);
-//        mEditor = mSharedPreferences.edit();
-//        setSystemMonitorSetting(true);
-//        mIsEnableMonitor  = getSystemMonitorSetting();
-        Log.d(TAG,"isOpenMonitor = " + mIsEnableMonitor);
-        initUI();
-        mMotorManager.initMotor();
-        btnStart.setEnabled(true);
-        startMonitorIfNeeded();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+            if(!Settings.canDrawOverlays(getApplicationContext())) {
+                //启动Activity让用户授权
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent,100);
+            } else {
+                initUI();
+                mMotorManager.initMotor();
+                btnStart.setEnabled(true);
+                startMonitorIfNeeded();
+            }
+        }
+
 
     }
-
 
 
     private void initTUTK() {
@@ -187,26 +219,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void initUI() {
-        RelativeLayout.LayoutParams lp;
-        mSurfaceView = (SurfaceView) findViewById(R.id.sv_surfaceview2);
-        mSurfaceView.setKeepScreenOn(true);
-        mHolder = mSurfaceView.getHolder();
-        mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 
-        lp = new RelativeLayout.LayoutParams(1080,
-                810);
-        if (mSurfaceView != null) {
-            mSurfaceView.setLayoutParams(lp);
-        }
+        WindowUtils.showPopupWindow(this);
+        mSurfacePreview = new SurfacePreview(this);
 
-        mSurfaceView.setVisibility(View.VISIBLE);
-        mSurfacePreview = new SurfacePreview(this,this);
-        mHolder.addCallback(mSurfacePreview);
+        mSurfacePreview.setVisibility(View.VISIBLE);
+
+        WindowUtils.addView(mSurfacePreview);
         if (mAvMediaRecorder == null) {
             mAvMediaRecorder = AvMediaRecorder.getInstance();
         }
         mAvMediaRecorder.setmActivity(this);
-        mAvMediaRecorder.setmHolder(mHolder);
+        mAvMediaRecorder.setmHolder(mSurfacePreview.surfaceHolder);
         btnStart = (Button) findViewById(R.id.start_muxer);
         btnStart.setText(mAplicationSetting.getSystemMonitorSetting() ? "停止" : "开始");
         btnStart.setOnClickListener(this);
@@ -216,14 +240,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onClick(View v) {
 
-                if(CallState == CallStateOff) {
+                if (CallState == CallStateOff) {
                     CallState = CallStateOn;
-                    if(mTutk != null) {
+                    if (mTutk != null) {
                         mTutk.StartCall();
                         //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
                         Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
                     }
-                }else if(CallState == CallStateOn) {
+                } else if (CallState == CallStateOn) {
                     CallState = CallStateOff;
                     if (mTutk != null) {
                         mTutk.StopCall();
@@ -236,30 +260,33 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     }
-    private void startMonitorIfNeeded(){
+
+    private void startMonitorIfNeeded() {
         mControllerHandler.sendEmptyMessageDelayed(Constant.INIT_TUTK_UID, 3000);
         //根据SharedPreferences中是否启动监控打开监控
-        if(mAplicationSetting.getSystemMonitorSetting()){
-            Log.d(TAG,"from SharedPreferences start monitor");
+        if (mAplicationSetting.getSystemMonitorSetting()) {
+            Log.d(TAG, "from SharedPreferences start monitor");
             mControllerHandler.sendEmptyMessageDelayed(Constant.START_RECORD, 6000);
         } else {
-            Log.d(TAG,"from SharedPreferences do not start monitor");
+            Log.d(TAG, "from SharedPreferences do not start monitor");
         }
     }
 
-    private void StartRecord(){
+    private void StartRecord() {
 
         mAvMediaRecorder.init();
         mAvMediaRecorder.avMediaRecorderStart();
 
     }
-    private void StopRecord(){
+
+    private void StopRecord() {
         mAvMediaRecorder.avMediaRecorderStop();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        WindowUtils.removeView(mSurfacePreview);
         mMotorManager.closeMotor();
 
         mTutk.unInit();
@@ -283,12 +310,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     RecordRuning = true;
                     mAplicationSetting.setSystemMonitorSetting(true);
                     StartRecord();
-                    Log.d(TAG,"start record ");
-                } else{
+                    Log.d(TAG, "start record ");
+                } else {
                     RecordRuning = false;
                     mAplicationSetting.setSystemMonitorSetting(false);
                     StopRecord();
-                    Log.d(TAG,"stop record ");
+                    Log.d(TAG, "stop record ");
                 }
                 btnStart.setText(RecordRuning ? "停止" : "开始");
                 break;
@@ -301,24 +328,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onBackPressed() {
         return;
     }
-
-    @Override
-    public boolean hasPermission() {
-        return true;
-    }
-
-//    @Override
-//    public void cameraHasOpened() {
-//        VideoGather.getInstance().doStartPreview(this, mHolder);
-//    }
-//
-//    @Override
-//    public void cameraHasPreview(int width, int height, int fps) {
-//        this.width = width;
-//        this.height = height;
-//        this.frameRate = fps;
-//    }
-
 
     public void getTUTKUID() {
         Log.d(TAG, " setTUTKUID ");
@@ -333,7 +342,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d(TAG, "tmpUid == NULL, retry");
                 tmpUid = "02:00:00:00:00:00";
             }
-            Log.d(TAG,"TUTK UID = " + tmpUid);
+            Log.d(TAG, "TUTK UID = " + tmpUid);
             Device tmpDevie = new Device();
             tmpDevie.setUID(tmpUid);
             String tmpJson;
@@ -378,5 +387,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (Constant.TUTK_DEVICE_UID.length() == 20) {
             initTUTK();
         }
+    }
+
+    public static boolean AUDIO_GATHER_DEBUG = false;
+    public static boolean AUDIO_ENCODE_DEBUG = false;
+    public static boolean VIDEO_GATHER_DEBUG = false;
+    public static boolean VIDEO_ENCODE_DEBUG = false;
+    public static boolean MUXER_DEBUG = false;
+    public static boolean TRANSFER_DEBUG = false;
+    public static boolean BUFFER_POOL_DEBUG = false;
+    private void initDebug() {
+        CompoundButton.OnCheckedChangeListener switchListener = new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                LogTool.d(TAG, "onCheckedChanged");
+                switch (buttonView.getId()) {
+                    case R.id.audio_gather_debug:
+                        AUDIO_GATHER_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.audio_encode_debug:
+                        AUDIO_ENCODE_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.video_gather_debug:
+                        VIDEO_GATHER_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.video_encode_debug:
+                        VIDEO_ENCODE_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.muxer_debug:
+                        MUXER_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.transfer_debug:
+                        TRANSFER_DEBUG = isChecked ? true : false;
+                        break;
+                    case R.id.buffer_pool_debug:
+                        BUFFER_POOL_DEBUG = isChecked ? true : false;
+                        break;
+                }
+            }
+        };
+        ((Switch)findViewById(R.id.audio_gather_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.audio_encode_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.video_gather_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.video_encode_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.muxer_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.transfer_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.buffer_pool_debug)).setOnCheckedChangeListener(switchListener);
     }
 }

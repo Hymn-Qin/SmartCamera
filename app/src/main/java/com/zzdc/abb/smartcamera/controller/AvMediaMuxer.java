@@ -81,7 +81,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                         } else if(data.getTrack() == TRACK_AUDIO){
                             track = audioTrackIndex;
                         }
-                        mediaMuxer.writeSampleData(track, data.getOutputBuffer(), data.getOutputBufferInfo());
+                        mediaMuxer.writeSampleData(track, data.getByteBuffer(), data.getBufferInfo());
 
                     } catch (Exception e) {
                         LogTool.w(TAG, "Mux video an audio failed", e);

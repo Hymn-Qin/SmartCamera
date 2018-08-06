@@ -22,8 +22,8 @@ public class VideoGather {
     private static final String TAG = VideoGather.class.getSimpleName();
     private static final boolean DEBUG = false;
 
-    private static final int PREVIEW_WIDTH = 640;
-    private static final int PREVIEW_HEIGHT = 480;
+    private static final int PREVIEW_WIDTH = 1920;
+    private static final int PREVIEW_HEIGHT = 1080;
     private int preWidth = PREVIEW_WIDTH;
     private int preHeight = PREVIEW_HEIGHT;
     private int mSetWidth = PREVIEW_WIDTH;
@@ -233,7 +233,7 @@ public class VideoGather {
             paramters.setPreviewSize(preWidth, preHeight);
 
             paramters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
-            paramters.setPictureSize(4608,3456);
+            //paramters.setPictureSize(640,480);
             paramters.set(KEY_QC_ZSL,"on");
             paramters.set(KEY_QC_SATURATION,5);
             paramters.set(KEY_QC_CONTRAST,5);
@@ -378,6 +378,6 @@ public class VideoGather {
     }
 
     private void debug(String msg) {
-        if (DEBUG) LogTool.d(TAG, msg);
+        if (DEBUG || MainActivity.VIDEO_GATHER_DEBUG) LogTool.d(TAG, msg);
     }
 }

@@ -71,13 +71,19 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         }
     };
 
-    private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
+    private HandlerThread mInputThread = new HandlerThread("Video encode input thread");
+    {
+        mInputThread.start();
+    }
+    private Handler mInputHandler = new Handler(mInputThread.getLooper()){
         @Override
-        public void onInputBufferAvailable(@NonNull MediaCodec mediaCodec, int i) {
-            debug("onInputBufferAvailable start. Queue size = "+mViewRawDataQueue.size() + ", buffer index = " + i);
-            VideoGather.VideoRawBuf buf = null;
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            MediaCodec mediaCodec = (MediaCodec)msg.obj;
+            int i = msg.arg1;
             try {
-                buf = mViewRawDataQueue.take();
+                VideoGather.VideoRawBuf buf = mViewRawDataQueue.take();
+                debug("Handle onInputBufferAvailable, buffer index = " + i);
                 if (selectColorFormat(VIDEO_MIME_TYPE) == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
                     NV21Convertor.Nv21ToYuv420SP(buf.getData(), mYuv420, mWidth, mHeight);
                 }
@@ -87,15 +93,26 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
                 inputBuffer.put(mYuv420);
                 long pts = System.currentTimeMillis() * 1000 - mStartTimeUs;
                 if (!mEncoding) {
-                    Log.d(TAG, "Send Video Encoder BUFFER_FLAG_END_OF_STREAM");
+                    Log.d(TAG, "Send Video Encoder with flag BUFFER_FLAG_END_OF_STREAM");
                     mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                 } else {
                     //TODO Check flag
                     mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, 0);
                 }
             } catch (InterruptedException e) {
-                LogTool.w(TAG, "", e);
+                LogTool.w(TAG, "Take Video raw data from queue with exception. ", e);
             }
+        }
+    };
+
+    private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
+        @Override
+        public void onInputBufferAvailable(@NonNull MediaCodec mediaCodec, int i) {
+            debug("onInputBufferAvailable start, buffer index = " + i);
+            Message msg = new Message();
+            msg.obj = mediaCodec;
+            msg.arg1 = i;
+            mInputHandler.sendMessage(msg);
         }
 
         @Override
@@ -112,13 +129,12 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
                     Constant.PPS = tmpPPS;
                     LogTool.d(TAG, "Find PPS size = " + bufferInfo.size);
                 }
-
-                EncoderBuffer buf = mVideoEncodeBufPool.getBuf();
-                buf.setEncoder(mEncoder);
-                buf.setOutputBuffer(buffer);
-                buf.setOutputBufferInfo(bufferInfo);
-                buf.setOutputBufferIndex(i);
+                EncoderBuffer buf = mVideoEncodeBufPool.getBuf(bufferInfo.size);
+                buf.put(buffer);
+                buf.getByteBuffer().position(0);
+                buf.setBufferInfo(bufferInfo);
                 buf.setTrack(AvMediaMuxer.TRACK_VIDEO);
+                debug("VideoEncoderListener.size = " + mVideoEncoderListeners.size());
                 if (mVideoEncoderListeners.size() > 0) {
                     for (VideoEncoderListener listener : mVideoEncoderListeners) {
                         listener.onVideoEncoded(buf);
@@ -133,12 +149,13 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         @Override
         public void onError(@NonNull MediaCodec mediaCodec, @NonNull MediaCodec.CodecException e) {
             //TODO
-            LogTool.w(TAG, "onError", e);
+            LogTool.w(TAG, "Video encode callback with onError", e);
         }
 
         @Override
         public void onOutputFormatChanged(@NonNull MediaCodec mediaCodec, @NonNull MediaFormat mediaFormat) {
             LogTool.d(TAG, "onOutputFormatChanged start");
+            VIDEO_FORMAT = mediaFormat;
             if (mVideoEncoderListeners.size() > 0) {
                 for (VideoEncoderListener listener : mVideoEncoderListeners) {
                     listener.onVideoFormatChanged(mediaFormat);
@@ -150,7 +167,6 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     public void init() {
         LogTool.d(TAG, "init");
         mVideoGather = VideoGather.getInstance();
-//        mVideoGather.registerVideoRawDataListener(this);
 
         mWidth = mVideoGather.getPreWidth();
         mHeight = mVideoGather.getPreHeight();
@@ -285,6 +301,6 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     }
 
     private void debug(String msg) {
-        if (DEBUG) LogTool.d(TAG, msg);
+        if (DEBUG || MainActivity.VIDEO_ENCODE_DEBUG) LogTool.d(TAG, msg);
     }
 }

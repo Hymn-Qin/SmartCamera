@@ -27,12 +27,13 @@ public class AvMediaRecorder {
     private AudioGather mAudioGather;
     private VideoGather mVideoGather;
     private AvMediaMuxer mMuxer;
+    private AlertMediaMuxer alertMuxer;
     private Activity mActivity;
 //    private SurfaceView mSurfaceView;
     private SurfaceHolder mHolder;
     private AudioEncoder mAudioEncoder;
     private VideoEncoder mVideoEncoder;
-    private AvMediaTransfer mAvMeidaTransfer;
+//    private AvMediaTransfer mAvMeidaTransfer;
     private PCMAudioDataTransfer mPCMAudioDataTransfer;
     private SDCardBussiness mSDCardBussiness;
     private static final int START_RECORD = 200;
@@ -44,6 +45,9 @@ public class AvMediaRecorder {
     public boolean ABBassistantRuning = true;
 	private SDCardBroadcastReceiver mReceiver;
 
+    private boolean RecordRuning = false;
+
+    private boolean RecordSwitch = true;
 
     private Handler mHandler = new Handler(){
         @Override
@@ -81,6 +85,35 @@ public class AvMediaRecorder {
                 deleteEarlyestFileIfNeed();
                 Log.d(TAG,"SDCardAvailable make Record");
                 startRecord();
+            } else if (intent.getAction().equalsIgnoreCase("com.foxconn.alert.camera.play")) {
+                String type = intent.getStringExtra("type");
+                String message = intent.getStringExtra("message");
+                Log.d("qxj", "get receive -- type = " + type + " message = " + message);
+                if (type.equals("ALERT")) {
+                    if (!AlertRecordRunning){
+                        startAlertRecord();
+                    } else {
+                        resetStopTime();
+                    }
+                } else if (type.equals("Camera")) {
+                    if (message.equals("false")) {
+                        if (RecordRuning) {
+                            avMediaRecorderStop();
+                        }
+                        RecordSwitch = false;
+                    } else if (message.equals("true")) {
+                        RecordSwitch = true;
+                        if (!RecordRuning) {
+                            avMediaRecorderStart();
+                        }
+
+                    }
+
+                    Intent intents = new Intent("com.foxconn.zzdc.broadcast.camera");
+                    intents.putExtra("type", type);
+                    intents.putExtra("result", message);
+                    context.sendBroadcast(intents);
+                }
             }
         }
     }
@@ -88,6 +121,7 @@ public class AvMediaRecorder {
     public void setmActivity(Activity mActivity) {
         this.mActivity = mActivity;
     }
+
     public void setmHolder(SurfaceHolder mHolder) {
         this.mHolder = mHolder;
     }
@@ -102,7 +136,6 @@ public class AvMediaRecorder {
         mSDCardBussiness = SDCardBussiness.getInstance();
 //        mMuxer = AvMediaMuxer.newInstance();
 
-        mAvMeidaTransfer = AvMediaTransfer.getInstance();
         mPCMAudioDataTransfer = PCMAudioDataTransfer.getInstance();
 
     }
@@ -126,8 +159,13 @@ public class AvMediaRecorder {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_REMOVED);
         filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
+        filter.addAction("com.foxconn.alert.camera.play");
         filter.addDataScheme("file");
         SmartCameraApplication.getContext().registerReceiver(mReceiver, filter);
+
+        IntentFilter filter1 = new IntentFilter();
+        filter1.addAction("com.foxconn.alert.camera.play");
+        SmartCameraApplication.getContext().registerReceiver(mReceiver, filter1);
 
 //        if(mSDCardBussiness.isSDCardAvailable() ){
 //            VIDEO_ROOT_PATH = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM/";
@@ -143,14 +181,18 @@ public class AvMediaRecorder {
         if(Constant.TUTK_DEVICE_UID.length() == 20){
             //Transfer
             Log.d(TAG,"有效uid，绑定发送器");
-            mVideoEncoder.registerEncoderListener(mAvMeidaTransfer);
-            mAudioEncoder.registerEncoderListener(mAvMeidaTransfer);
+//            mVideoEncoder.registerEncoderListener(mAvMeidaTransfer);
+//            mAudioEncoder.registerEncoderListener(mAvMeidaTransfer);
         }else{
             Log.d(TAG,"无效uid，不绑定发送器");
         }
     }
 
     public void avMediaRecorderStart(){
+        if (!RecordSwitch) {
+            return;
+        }
+        RecordRuning = true;
         if(!mAudioGather.AudioGatherRuning){
             mAudioGather.startRecord();
         }
@@ -174,7 +216,7 @@ public class AvMediaRecorder {
         //有效uid
         if (Constant.TUTK_DEVICE_UID.length() == 20){
             Log.d(TAG,"有效uid，激活发送器");
-            mAvMeidaTransfer.startAvMediaTransfer();
+//            mAvMeidaTransfer.startAvMediaTransfer();
         }else{
             Log.d(TAG,"无效uid,不激活发送器");
         }
@@ -182,10 +224,11 @@ public class AvMediaRecorder {
     }
 
     public void avMediaRecorderStop(){
+        RecordRuning = false;
         Log.d(TAG,"avMediaRecorderStop");
         SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
         mVideoEncoder.stop();
-        mVideoEncoder.unRegisterEncoderListener(mAvMeidaTransfer);
+//        mVideoEncoder.unRegisterEncoderListener(mAvMeidaTransfer);
         new Handler().postDelayed(new Runnable(){
             public void run() {
                 mVideoGather.doStopCamera();
@@ -193,7 +236,7 @@ public class AvMediaRecorder {
             }
         }, 300);
         mAudioEncoder.stop();
-        mAudioEncoder.unRegisterEncoderListener(mAvMeidaTransfer);
+//        mAudioEncoder.unRegisterEncoderListener(mAvMeidaTransfer);
         new Handler().postDelayed(new Runnable(){
             public void run() {
             if(!ABBassistantRuning){
@@ -210,6 +253,9 @@ public class AvMediaRecorder {
 
         if(mMuxer != null){
             mMuxer.release();
+        }
+        if (alertMuxer != null) {
+            alertMuxer.release();
         }
     }
 
@@ -333,4 +379,88 @@ public class AvMediaRecorder {
         }
     }
 
+    private static boolean AlertRecordRunning = false;
+    private void startAlertRecord() {
+        Log.d("qxj", "startAlertRecord---");
+        alertMuxer = AlertMediaMuxer.newInstance();
+        alertMuxer.initMediaMuxer();
+        mAudioEncoder.registerEncoderListener(alertMuxer);
+        mVideoEncoder.registerEncoderListener(alertMuxer);
+        AlertRecordRunning = true;
+        waitAlertForStart();
+    }
+
+    private void stopAlertRecord() {
+        Log.d("qxj", " stopRecord ");
+        if (alertMuxer != null) {
+            mAudioEncoder.unRegisterEncoderListener(alertMuxer);
+            mVideoEncoder.unRegisterEncoderListener(alertMuxer);
+            alertMuxer.stopMediaMuxer();
+            alertMuxer.release();
+            alertMuxer = null;
+            AlertRecordRunning = false;
+        }
+
+        if (!mSDCardBussiness.isSDCardAvailable()) {
+            Log.d("qxj", "SD card has removed ");
+            return;
+        }
+        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
+            @Override
+            public void onScanCompleted(String path, Uri uri) {
+                Log.d("qxj", "onScanCompleted path = " + path + " uri = " + uri);
+            }
+        });
+
+    }
+
+    private Handler handler;
+    private Runnable runnable;
+    private void waitAlertForStart() {
+
+        long tmpAvailableSpace = mSDCardBussiness.getAvailableSpace();
+        if (tmpAvailableSpace < SD_MEM_THRESHOLD) {
+            Log.d("qxj", "AvailableSpace < 300M");
+            deleteEarlyestFileIfNeed();
+        }
+
+        if (alertMuxer == null) {
+            return;
+        }
+        if (!alertMuxer.startMediaMuxer()) {
+            new Handler().postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    waitAlertForStart();
+                }
+            }, 500);
+        } else {
+            handler =new Handler();
+            runnable = new Runnable() {
+                @Override
+                public void run() {
+                    stopAlertRecord();
+                }
+            };
+            handler.postDelayed(runnable, 30 * 1000);
+        }
+
+    }
+
+    private void resetStopTime() {
+        if (handler != null && runnable != null) {
+            handler.removeCallbacks(runnable);
+            handler = null;
+            runnable = null;
+
+            handler =new Handler();
+            runnable = new Runnable() {
+                @Override
+                public void run() {
+                    stopAlertRecord();
+                }
+            };
+            handler.postDelayed(runnable, 30 * 1000);
+        }
+    }
 }

@@ -1,5 +1,7 @@
 package com.zzdc.abb.smartcamera.util;
 
+import com.zzdc.abb.smartcamera.controller.MainActivity;
+
 import java.util.ArrayList;
 
 public class BufferPool<T extends BufferPool.Buf> {
@@ -36,6 +38,7 @@ public class BufferPool<T extends BufferPool.Buf> {
             }
         }
         if (buf != null) {
+            buf.clear();
             mUsed.add(buf);
             buf.increaseRef();
         }
@@ -96,6 +99,7 @@ public class BufferPool<T extends BufferPool.Buf> {
         }
 
         protected void updateSize(int size) {}
+        protected void clear() {}
 
         public synchronized int increaseRef() {
             //debug(getCallStatck());
@@ -131,18 +135,10 @@ public class BufferPool<T extends BufferPool.Buf> {
         private String poolName() {
             return (mPool!=null)? mPool.mName: null;
         }
-
-/*        public int getTrack() {
-            return track;
-        }
-
-        public void setTrack(int value) {
-            track = value;
-        }*/
     }
 
     void debug(String msg) {
-        if (mDebug) {
+        if (mDebug || MainActivity.BUFFER_POOL_DEBUG) {
             LogTool.d(TAG, mName + ". " + msg);
         }
     }

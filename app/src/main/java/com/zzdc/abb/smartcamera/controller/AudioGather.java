@@ -204,7 +204,7 @@ public class AudioGather {
     }
 
     private void debug(String msg) {
-        if (DEBUG) {
+        if (DEBUG || MainActivity.AUDIO_GATHER_DEBUG) {
             LogTool.d(TAG, msg);
         }
     }
