@@ -1,4 +1,4 @@
-package com.zzdc.abb.smartcamera.ArcSoft;
+package com.zzdc.abb.smartcamera.FaceContrast;
 
 import com.arcsoft.facerecognition.AFR_FSDKFace;
 

@@ -1,4 +1,4 @@
-package com.zzdc.abb.smartcamera.ArcSoft;
+package com.zzdc.abb.smartcamera.FaceContrast;
 
 public class AirSoftFaceConfig {
 

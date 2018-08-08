@@ -1,4 +1,4 @@
-package com.zzdc.abb.smartcamera.ArcSoft;
+package com.zzdc.abb.smartcamera.FaceContrast;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -30,7 +30,7 @@ public class FeatureExtractManager {
      * <p>
      * FaceFeatureManager a = new FaceFeatureManager(faceName, faceImagePath);
      * ArrayList<byte[]> faceDataList = a.FRToExtractFeature();
-     * 保存到数据库数据  AirSoftUtil.saveOrUpdateFaceData(faceName, faceDataList.item);
+     * 保存到数据库数据  Utils.saveOrUpdateFaceData(faceName, faceDataList.item);
      * a.UninitFaceFeatureManager();
      *
      * @param faceName      人员名字
@@ -147,22 +147,18 @@ public class FeatureExtractManager {
             Bitmap temp = Bitmap.createBitmap(res, 0, 0, res.getWidth(), res.getHeight(), matrix, true);
             Log.d(TAG, "check target Image:" + temp.getWidth() + "X" + temp.getHeight());
 
-            if (!temp.equals(res)) {
-                res.recycle();
-            }
-
-            byte[] data = new byte[res.getWidth() * res.getHeight() * 3 / 2];
+            byte[] data = new byte[temp.getWidth() * temp.getHeight() * 3 / 2];
             ImageConverter convert = new ImageConverter();
-            convert.initial(res.getWidth(), res.getHeight(), ImageConverter.CP_PAF_NV21);
-            if (convert.convert(res, data)) {
+            convert.initial(temp.getWidth(), temp.getHeight(), ImageConverter.CP_PAF_NV21);
+            if (convert.convert(temp, data)) {
                 Log.d(TAG, "convert <<path>> ok! " + path);
             }
             convert.destroy();
             facePIC = new FacePictures();
             facePIC.setNV21(data);
             facePIC.setFileName(path);
-            facePIC.setWidth(res.getWidth());
-            facePIC.setHigh(exeHigh(res.getHeight()));
+            facePIC.setWidth(temp.getWidth());
+            facePIC.setHigh(exeHigh(temp.getHeight()));
             return facePIC;
         } catch (Exception e) {
             e.printStackTrace();

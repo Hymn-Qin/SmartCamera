@@ -1,10 +1,6 @@
-package com.zzdc.abb.smartcamera.ArcSoft;
+package com.zzdc.abb.smartcamera.FaceContrast;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.graphics.Rect;
-import android.media.ExifInterface;
 import android.util.Log;
 
 import com.arcsoft.facedetection.AFD_FSDKEngine;
@@ -14,9 +10,7 @@ import com.arcsoft.facerecognition.AFR_FSDKEngine;
 import com.arcsoft.facerecognition.AFR_FSDKError;
 import com.arcsoft.facerecognition.AFR_FSDKFace;
 import com.arcsoft.facerecognition.AFR_FSDKMatching;
-import com.guo.android_extend.image.ImageConverter;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -79,7 +73,7 @@ public class FeatureContrastManager {
     private CopyOnWriteArrayList<FaceFRBean> faceDataToFaceFR(List<FaceDatabase> faceDataBeans) {
         CopyOnWriteArrayList<FaceFRBean> faceFRBeans = new CopyOnWriteArrayList<>();
         for (FaceDatabase faceDatabase : faceDataBeans) {
-            if (faceDatabase.face != null && faceDatabase.name != null) {
+            if (faceDatabase.face == null || faceDatabase.name == null) {
                 continue;
             }
             AFR_FSDKFace fsdkFace = new AFR_FSDKFace();

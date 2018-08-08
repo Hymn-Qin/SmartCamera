@@ -1,23 +1,17 @@
-package com.zzdc.abb.smartcamera.ArcSoft;
+package com.zzdc.abb.smartcamera.FaceContrast;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
-import android.media.ExifInterface;
 import android.util.Log;
 
-import com.guo.android_extend.image.ImageConverter;
 import com.raizlabs.android.dbflow.sql.language.SQLite;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 
-public class AirSoftUtil {
+public class Utils {
 
-    private static final String TAG = "AirSoftUtil";
+    private static final String TAG = "Utils";
 
     private static final String facePath = "FACE";
 
