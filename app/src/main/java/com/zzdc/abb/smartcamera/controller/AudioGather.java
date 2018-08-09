@@ -8,7 +8,7 @@ import android.util.Log;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
-import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AudioGather {
     private static final String TAG = "AudioGather";
@@ -186,7 +186,7 @@ public class AudioGather {
             mDenoiseManager.release();
     }
 
-    ArrayList<AudioRawDataListener> mAudioRawDataListeners = new ArrayList<>();
+    CopyOnWriteArrayList<AudioRawDataListener> mAudioRawDataListeners = new CopyOnWriteArrayList<>();
     public void registerAudioRawDataListener(AudioRawDataListener listener) {
         if (!mAudioRawDataListeners.contains(listener)) {
             mAudioRawDataListeners.add(listener);

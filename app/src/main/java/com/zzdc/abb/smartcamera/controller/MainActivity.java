@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,7 +17,6 @@ import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -27,14 +26,16 @@ import android.widget.Switch;
 import android.widget.Toast;
 
 import com.ptz.motorControl.MotorCmd;
-import com.ptz.motorControl.MotorDevicePose;
 import com.ptz.motorControl.MotorManager;
+import com.raizlabs.android.dbflow.config.FlowManager;
 import com.zzdc.abb.smartcamera.R;
+import com.zzdc.abb.smartcamera.SmartCameraReceiver;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.Device;
 import com.zzdc.abb.smartcamera.util.LogTool;
+import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 import com.zzdc.abb.smartcamera.util.TUTKUIDUtil;
 import com.zzdc.abb.smartcamera.util.WindowUtils;
 
@@ -49,7 +50,6 @@ import java.io.InputStreamReader;
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static final String TAG = MainActivity.class.getSimpleName();
 
-    private SurfaceView mSurfaceView;
     private Button btnStart;
     private Button btnCall;
     private SurfacePreview mSurfacePreview;
@@ -59,22 +59,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private TutkManager mTutk;
     private AvMediaRecorder mAvMediaRecorder = null;
 
-    private static final int CallStateOff = 0;
-    private static final int CallStateOn = 1;
     private OneKeyCallReciever mOneKeyCallReciever;
-    private SharedPreferences mSharedPreferences;
-    private SharedPreferences.Editor mEditor;
-    public static final String PREFRENCE = "com.zzdc.abb.smartcamera";
     public static final String ACTION_START_MONITOR = "com.zzdc.action.START_MONITOR";
     public static final String ACTION_STOP_MONITOR = "com.zzdc.action.STOP_MONITOR";
     private boolean mIsEnableMonitor;
     private static Context mContext;
 
-    private int CallState = CallStateOff;
+    public static final int CallStateOff = 0;
+    public static final int CallStateOn = 1;
+    public static int CallState = CallStateOff;
+
+    private AudioManager mAudioManager;
+
     public static final  String DEVICE_INFO_FILE = android.os.Environment
             .getExternalStorageDirectory().getAbsolutePath() + File.separator + "device.json";
     final MotorManager mMotorManager = MotorManager.getManger();
-    private HistoryManager mHistoryManager;
+
+    public static MainActivity mainActivity;
 
     private Handler mControllerHandler = new Handler() {
         @Override
@@ -107,6 +108,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             // an Intent broadcast.
             Log.e(TAG, "onReceive " + intent.getAction());
             if (intent.getAction().equalsIgnoreCase("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED")){
+                int mode = mAudioManager.getMode();
+                Log.d(TAG,"mode="+mode + ",CallState="+CallState);
+
                 if(CallState == CallStateOff) {
                     CallState = CallStateOn;
                     if(mTutk != null) {
@@ -134,6 +138,42 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 mIsEnableMonitor  = mAplicationSetting.getSystemMonitorSetting();
                 Log.d(TAG,"isOpenMonitor = " + mIsEnableMonitor);
 
+            } else if (intent.getAction().equalsIgnoreCase("com.foxconn.alert.camera.play")) {
+                String type = intent.getStringExtra("type");
+                String message = intent.getStringExtra("message");
+                Log.d("qxj", "get receive -- type = " + type + " message = " + message);
+                if (type.equals("ALERT")) {
+                    if (!AvMediaRecorder.AlertRecordRunning){
+                        mAvMediaRecorder.startAlertRecord();
+                    } else {
+                        mAvMediaRecorder.resetStopTime(0);
+                    }
+                } else if (type.equals("Camera")) {
+                    if (message.equals("false")) {
+                        if (mAplicationSetting.getSystemMonitorOKSetting()) {
+                            mAplicationSetting.setSystemMonitorOKSetting(false);
+                            if (RecordRuning) {
+                                StopRecord();
+                                RecordRuning = false;
+                            }
+                        }
+
+                    } else if (message.equals("true")) {
+
+                        if (!mAplicationSetting.getSystemMonitorOKSetting()) {
+                            mAplicationSetting.setSystemMonitorOKSetting(true);
+                            if (!RecordRuning) {
+                                StartRecord();
+                                RecordRuning = true;
+                            }
+                        }
+                    }
+                    Log.d("qxj", "send com.foxconn.zzdc.broadcast.camera receive -- type = " + type + " message = " + message);
+                    Intent intents = new Intent("com.foxconn.zzdc.broadcast.camera");
+                    intents.putExtra("type", type);
+                    intents.putExtra("result", message);
+                    context.sendBroadcast(intents);
+                }
             }
 
         }
@@ -156,28 +196,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
         }
     }
+    private SmartCameraReceiver receiver = new SmartCameraReceiver();
+    private void registerResetWifiBroadcast(){
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("com.foxconn.zzdc.broadcast.OPEN_HOT_SPOT");
+        Log.d(TAG,"qr scan register ");
+        registerReceiver(receiver, filter);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
+        mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         RecordRuning = false;
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main2);
         initDebug();
-
+        mainActivity = this;
+        registerResetWifiBroadcast();
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
+        filter.addAction("com.foxconn.alert.camera.play");
         mOneKeyCallReciever = new OneKeyCallReciever();
         registerReceiver(mOneKeyCallReciever, filter);
-//        mAudioManager = (AudioManager) this.getSystemService(Context.AUDIO_SERVICE);
-//        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
-//        mAudioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxVolume, AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
-//        mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-//         mAudioManager.setSpeakerphoneOn(true);
-        mContext = getApplicationContext();
 
+        mContext = getApplicationContext();
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
                 | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -187,15 +231,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         mAplicationSetting = ApplicationSetting.getInstance();
         mAplicationSetting.SetContext(this);
-   //     mAplicationSetting.setSystemMonitorSetting(true);
         mIsEnableMonitor = mAplicationSetting.getSystemMonitorSetting();
 
-        MotorDevicePose devicePose = MotorDevicePose.getInstance();
-        devicePose.SetContext(this);
-        MotorCmd.DEVICE_POSE = devicePose.getDevicePose();
+        //数据库初始化
+        FlowManager.init(this);
+        //设备姿态
+        MotorCmd.DEVICE_POSE = mAplicationSetting.getDevicePose();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-
             if(!Settings.canDrawOverlays(getApplicationContext())) {
                 //启动Activity让用户授权
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
@@ -208,10 +251,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 startMonitorIfNeeded();
             }
         }
-
-
     }
-
 
     private void initTUTK() {
         mTutk = TutkManager.getInstance();
@@ -219,10 +259,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void initUI() {
-
         WindowUtils.showPopupWindow(this);
         mSurfacePreview = new SurfacePreview(this);
-
         mSurfacePreview.setVisibility(View.VISIBLE);
 
         WindowUtils.addView(mSurfacePreview);
@@ -230,56 +268,53 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             mAvMediaRecorder = AvMediaRecorder.getInstance();
         }
         mAvMediaRecorder.setmActivity(this);
-        mAvMediaRecorder.setmHolder(mSurfacePreview.surfaceHolder);
-        btnStart = (Button) findViewById(R.id.start_muxer);
+        mAvMediaRecorder.setmHolder(SurfacePreview.surfaceHolder);
+        btnStart = findViewById(R.id.start_muxer);
         btnStart.setText(mAplicationSetting.getSystemMonitorSetting() ? "停止" : "开始");
         btnStart.setOnClickListener(this);
 
-        btnCall = (Button) findViewById(R.id.VoiceCall);
+        btnCall = findViewById(R.id.VoiceCall);
         btnCall.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                if (CallState == CallStateOff) {
+                Log.d(TAG,"CallState="+CallState + ",mode="+mAudioManager.getMode());
+                if(CallState == CallStateOff) {
                     CallState = CallStateOn;
-                    if (mTutk != null) {
+                    if(mTutk != null) {
                         mTutk.StartCall();
-                        //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
                         Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
                     }
-                } else if (CallState == CallStateOn) {
+                }else if(CallState == CallStateOn) {
                     CallState = CallStateOff;
                     if (mTutk != null) {
                         mTutk.StopCall();
-                        //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
                         Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
                     }
                 }
             }
         });
-
-
     }
 
-    private void startMonitorIfNeeded() {
+    private void startMonitorIfNeeded(){
         mControllerHandler.sendEmptyMessageDelayed(Constant.INIT_TUTK_UID, 3000);
         //根据SharedPreferences中是否启动监控打开监控
-        if (mAplicationSetting.getSystemMonitorSetting()) {
-            Log.d(TAG, "from SharedPreferences start monitor");
+        if(mAplicationSetting.getSystemMonitorSetting()){
+            Log.d(TAG,"from SharedPreferences start monitor");
             mControllerHandler.sendEmptyMessageDelayed(Constant.START_RECORD, 6000);
         } else {
-            Log.d(TAG, "from SharedPreferences do not start monitor");
+            Log.d(TAG,"from SharedPreferences do not start monitor");
         }
     }
 
-    private void StartRecord() {
-
+    private void StartRecord(){
+        if (!mAplicationSetting.getSystemMonitorOKSetting()) {
+            return;
+        }
         mAvMediaRecorder.init();
         mAvMediaRecorder.avMediaRecorderStart();
-
     }
 
-    private void StopRecord() {
+    private void StopRecord(){
         mAvMediaRecorder.avMediaRecorderStop();
     }
 
@@ -288,8 +323,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onDestroy();
         WindowUtils.removeView(mSurfacePreview);
         mMotorManager.closeMotor();
-
-        mTutk.unInit();
+        if(mTutk!=null){
+            mTutk.unInit();
+        }
         if (RecordRuning) {
             RecordRuning = false;
             mAvMediaRecorder.avMediaRecorderStop();
@@ -297,6 +333,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         VideoGather.getInstance().doStopCamera();
         unregisterReceiver(mOneKeyCallReciever);
+        unregisterReceiver(receiver);
     }
 
     @Override
@@ -305,17 +342,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.start_muxer:
              //   startRecord();
                 Log.d(TAG,"record clicked");
-                if(RecordRuning == false)
-                {
+                if(!RecordRuning) {
                     RecordRuning = true;
                     mAplicationSetting.setSystemMonitorSetting(true);
                     StartRecord();
-                    Log.d(TAG, "start record ");
-                } else {
+                    Log.d(TAG,"start record ");
+                } else{
                     RecordRuning = false;
                     mAplicationSetting.setSystemMonitorSetting(false);
                     StopRecord();
-                    Log.d(TAG, "stop record ");
+                    Log.d(TAG,"stop record ");
                 }
                 btnStart.setText(RecordRuning ? "停止" : "开始");
                 break;
@@ -325,24 +361,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
-    public void onBackPressed() {
-        return;
-    }
+    public void onBackPressed() { }
 
     public void getTUTKUID() {
-        Log.d(TAG, " setTUTKUID ");
+        Log.d(TAG, " getTUTKUID ");
         File tmpFile = new File(DEVICE_INFO_FILE);
-        StringBuilder tmpStringBuilder = null;
         String line;
 
         if (!tmpFile.exists()) {
-
             String tmpUid = TUTKUIDUtil.getTUTKUID();
             if (TextUtils.isEmpty(tmpUid)) {
                 Log.d(TAG, "tmpUid == NULL, retry");
                 tmpUid = "02:00:00:00:00:00";
             }
-            Log.d(TAG, "TUTK UID = " + tmpUid);
+            Log.d(TAG,"TUTK UID = " + tmpUid);
             Device tmpDevie = new Device();
             tmpDevie.setUID(tmpUid);
             String tmpJson;
@@ -359,17 +391,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d(TAG, "Exception " + e.toString());
                 e.printStackTrace();
             }
-
         } else {
             if (tmpFile.length() > 0) {
                 try {
                     FileInputStream tmpFIS = new FileInputStream(tmpFile);
                     InputStreamReader tmpStreamReader = new InputStreamReader(tmpFIS);
                     BufferedReader reader = new BufferedReader(tmpStreamReader);
-                    tmpStringBuilder = new StringBuilder();
+                    StringBuilder tmpStringBuilder = new StringBuilder();
 
                     while ((line = reader.readLine()) != null) {
-                        // stringBuilder.append(line);
                         tmpStringBuilder.append(line);
                     }
                     JSONObject jsonObject = new JSONObject(tmpStringBuilder.toString());
@@ -381,7 +411,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     e.printStackTrace();
                 }
             }
-
         }
 
         if (Constant.TUTK_DEVICE_UID.length() == 20) {
@@ -403,25 +432,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 LogTool.d(TAG, "onCheckedChanged");
                 switch (buttonView.getId()) {
                     case R.id.audio_gather_debug:
-                        AUDIO_GATHER_DEBUG = isChecked ? true : false;
+                        AUDIO_GATHER_DEBUG = isChecked;
                         break;
                     case R.id.audio_encode_debug:
-                        AUDIO_ENCODE_DEBUG = isChecked ? true : false;
+                        AUDIO_ENCODE_DEBUG = isChecked;
                         break;
                     case R.id.video_gather_debug:
-                        VIDEO_GATHER_DEBUG = isChecked ? true : false;
+                        VIDEO_GATHER_DEBUG = isChecked;
                         break;
                     case R.id.video_encode_debug:
-                        VIDEO_ENCODE_DEBUG = isChecked ? true : false;
+                        VIDEO_ENCODE_DEBUG = isChecked;
                         break;
                     case R.id.muxer_debug:
-                        MUXER_DEBUG = isChecked ? true : false;
+                        MUXER_DEBUG = isChecked;
                         break;
                     case R.id.transfer_debug:
-                        TRANSFER_DEBUG = isChecked ? true : false;
+                        TRANSFER_DEBUG = isChecked;
                         break;
                     case R.id.buffer_pool_debug:
-                        BUFFER_POOL_DEBUG = isChecked ? true : false;
+                        BUFFER_POOL_DEBUG = isChecked;
                         break;
                 }
             }
@@ -434,4 +463,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         ((Switch)findViewById(R.id.transfer_debug)).setOnCheckedChangeListener(switchListener);
         ((Switch)findViewById(R.id.buffer_pool_debug)).setOnCheckedChangeListener(switchListener);
     }
+
+
+
 }

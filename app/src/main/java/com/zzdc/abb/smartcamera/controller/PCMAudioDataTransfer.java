@@ -1,19 +1,18 @@
 package com.zzdc.abb.smartcamera.controller;
 
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
 
-//import com.foxconn.abbassistant.AssistantAudioInterface;
-//import com.foxconn.abbassistant.AudioData;
 import com.foxconn.abbassistant.AssistantAudioInterface;
 import com.foxconn.abbassistant.AudioData;
 import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
-import java.util.concurrent.LinkedBlockingQueue;
+
+//import com.foxconn.abbassistant.AssistantAudioInterface;
+//import com.foxconn.abbassistant.AudioData;
 
 /**
  * 文件名: PCMAudioDataTransfer
@@ -28,6 +27,10 @@ public class PCMAudioDataTransfer implements AudioGather.AudioRawDataListener {
     private AssistantAudioInterface mAssistantAudioInterface;
     private final int DEFAULT_MODE = 0;
     private final int MONITOR_MODE = 1;
+    //关闭语音
+    public static final int TELEPHONY_ON_MODE = 4;
+    //打开语音
+    public static final int TELEPHONY_OFF_MODE = 5;
     private boolean isReady = false;
     AudioData mAudioData = new AudioData();
     private PCMAudioDataTransfer(){
@@ -65,16 +68,17 @@ public class PCMAudioDataTransfer implements AudioGather.AudioRawDataListener {
         SmartCameraApplication.getContext().unbindService(mServiceConnection);
     }
 
-    private void changeVoiceMode(int aMode){
+    public void changeVoiceMode(int aMode){
+        Log.d(TAG,"mode="+aMode+",ready = "+isReady);
         try {
             if (!isReady) {
                 attemptToBindService();
                 return;
             }
-
+            Log.d(TAG,"ready = "+isReady);
             mAssistantAudioInterface.getAudioMode(aMode);
         }catch (Exception e){
-
+            e.printStackTrace();
             Log.d(TAG,"mAssistantAudioInterface.getAudioMode " + e.toString());
         }
     }

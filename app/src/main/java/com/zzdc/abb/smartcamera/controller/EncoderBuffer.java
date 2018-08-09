@@ -16,6 +16,7 @@ public class EncoderBuffer extends BufferPool.Buf {
 
     public EncoderBuffer() {
         mBuffer = ByteBuffer.allocate(ALIGN_EDGE);
+        mBufferInfo = new MediaCodec.BufferInfo();
     }
 
     @Override
@@ -32,18 +33,18 @@ public class EncoderBuffer extends BufferPool.Buf {
         mBuffer.clear();
     }
 
-    public void put(ByteBuffer buffer) {
-        if (buffer != null) {
-            mBuffer.put(buffer);
-        }
+    public void put(ByteBuffer buffer, MediaCodec.BufferInfo info) {
+        mBuffer.clear();
+        mBuffer.put(buffer);
+        mBufferInfo.set(0, info.size, info.presentationTimeUs, info.flags);
+      //  mBuffer.position(mBufferInfo.offset);
+        mBuffer.position(0);
+        mBuffer.limit(info.size);
+        buffer.position(info.offset);
     }
 
     public ByteBuffer getByteBuffer() {
         return mBuffer;
-    }
-
-    public void setBufferInfo(MediaCodec.BufferInfo info) {
-        mBufferInfo = info;
     }
 
     public MediaCodec.BufferInfo getBufferInfo() {

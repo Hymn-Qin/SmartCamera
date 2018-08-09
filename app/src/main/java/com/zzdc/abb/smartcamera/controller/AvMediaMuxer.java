@@ -4,11 +4,9 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.util.Log;
-
-
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
+import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
-
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
@@ -16,178 +14,160 @@ import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener{
-
     private final static String TAG = AvMediaMuxer.class.getSimpleName();
-    public static final int TRACK_VIDEO = 0;
-    public static final int TRACK_AUDIO = 1;
-    private final Object lock = new Object();
-    private MediaMuxer mediaMuxer;
-    //缓冲传输过来的数据
-    private LinkedBlockingQueue<EncoderBuffer> muxerDatas = new LinkedBlockingQueue<>();
-    private int videoTrackIndex = -1;
-    private int audioTrackIndex = -1;
-    private boolean isVideoAdd;
-    private boolean isAudioAdd;
-    private Thread workThread;
-    private boolean isMediaMuxerStart;
-    private volatile boolean loop;
 
-    public static MediaFormat AUDIO_FORMAT;
-    public static MediaFormat VIDEO_FORMAT;
-    private String mMediaFile;
+    private boolean mMuxering;
+    private MediaMuxer mMediaMuxer;
+    private LinkedBlockingQueue<EncoderBuffer> mMuxerDatas = new LinkedBlockingQueue<>();
+    private BufferPool<EncoderBuffer> mEncodBuf = new BufferPool<>(EncoderBuffer.class, 3);
 
-    private static final AvMediaMuxer mInstance = new AvMediaMuxer();
+    private static final int TRACK_VIDEO = 0;
+    private static final int TRACK_AUDIO = 1;
+    private int mAudioTrackIndex = -1;
+    private int mVideoTrackIndex = -1;
+    private MediaFormat AUDIO_FORMAT = null;
+    private MediaFormat VIDEO_FORMAT = null;
 
-    private AvMediaMuxer() {}
+    private long mLastAudioFrameTimestamp = 0;
+    private long mLastVideoFrameTimestamp = 0;
+    private boolean isPPSAdded = false;
 
-    public static AvMediaMuxer newInstance() {
-        return mInstance;
-    }
-
-    public void initMediaMuxer() {
-        //create file for local test
-        mMediaFile = generateVideoFileName();
-        if (loop) {
-            throw new RuntimeException("====MediaMuxer线程已经启动===");
-        }
-        try {
-            Log.d(TAG, "====创建媒体混合器 start...");
-            mediaMuxer = new MediaMuxer(mMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            Log.d(TAG, "====创建媒体混合器 done...");
-        }catch (Exception e){
-            e.printStackTrace();
-            Log.e(TAG, "====创建媒体混合器 error: "+e.toString());
-        }
-
-        workThread = new Thread("mediaMuxer-thread") {
-            @Override
-            public void run() {
-                //混合器未开启
-                synchronized (lock) {
-                    try {
-                        Log.d(TAG, "====媒体混合器等待开启...");
-                        lock.wait();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+    private Thread mWorkThread = new Thread("MediaMuxer-thread") {
+        @Override
+        public void run() {
+            LogTool.d(TAG, "Media muxer thread start.");
+            mMediaMuxer.start();
+            while (mMuxering) {
+                EncoderBuffer data = null;
+                try {
+                    data = mMuxerDatas.take();
+                    if (data.getTrack() == TRACK_VIDEO) {
+                        mMediaMuxer.writeSampleData(mVideoTrackIndex, data.getByteBuffer(), data.getBufferInfo());
+                    } else if(data.getTrack() == TRACK_AUDIO){
+                        mMediaMuxer.writeSampleData(mAudioTrackIndex, data.getByteBuffer(), data.getBufferInfo());
+                    } else {
+                        LogTool.w(TAG, "Find unknow track. " + data.getTrack());
+                    }
+                } catch (Exception e) {
+                    LogTool.w(TAG, "Mux video an audio with exception, ", e);
+                } finally {
+                    if (data != null) {
+                        data.decreaseRef();
                     }
                 }
-                while (loop && !Thread.interrupted()) {
-                    EncoderBuffer data = null;
-                    try {
-                        data = muxerDatas.take();
-                        int track = -1;
-                        if (data.getTrack() == TRACK_VIDEO) {
-                            track = videoTrackIndex;
-                        } else if(data.getTrack() == TRACK_AUDIO){
-                            track = audioTrackIndex;
-                        }
-                        mediaMuxer.writeSampleData(track, data.getByteBuffer(), data.getBufferInfo());
-
-                    } catch (Exception e) {
-                        LogTool.w(TAG, "Mux video an audio failed", e);
-                    } finally {
-                        if (data != null) {
-                            data.decreaseRef();
-                        }
-                    }
-                }
-                muxerDatas.clear();
-                stopMediaMuxer();
-                Log.d(TAG, "=====媒体混合器退出...");
             }
-        };
-
-        loop = true;
-        workThread.start();
-    }
-
-    public void release() {
-        loop = false;
-        if (workThread != null) {
-            workThread.interrupt();
+            mMediaMuxer.stop();
+            mMediaMuxer.release();
+            LogTool.d(TAG, "Media muxer thread stop.");
         }
-    }
+    };
 
     public boolean startMediaMuxer() {
-        if (isMediaMuxerStart)
-            return false;
-        if(VideoEncoder.VIDEO_FORMAT == null && AudioEncoder.AUDIO_FORMAT == null){
-            Log.d(TAG,"VideoEncoder.VIDEO_FORMAT == null && AudioEncoder.AUDIO_FORMAT == null");
-            return false;
-        }
+
         if ((AUDIO_FORMAT == null || VIDEO_FORMAT ==  null)){
             AUDIO_FORMAT = AudioEncoder.AUDIO_FORMAT;
             VIDEO_FORMAT  = VideoEncoder.VIDEO_FORMAT;
         }
 
         if ((AUDIO_FORMAT == null || VIDEO_FORMAT ==  null)){
-            Log.d(TAG,"AUDIO_FORMAT == null || VIDEO_FORMAT ==  null");
+            LogTool.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
             return false;
-        }
-
-        audioTrackIndex = mediaMuxer.addTrack(AUDIO_FORMAT);
-        isAudioAdd = true;
-        videoTrackIndex = mediaMuxer.addTrack(VIDEO_FORMAT);
-        isVideoAdd = true;
-
-        synchronized (lock) {
-            if (isAudioAdd && isVideoAdd) {
-                Log.d(TAG, "====启动媒体混合器=====");
-                mediaMuxer.start();
-                isMediaMuxerStart = true;
-                lock.notify();
+        } else {
+            String tmpMediaFile = generateVideoFileName();
+            try {
+                LogTool.d(TAG, "Create MediaMuxer start");
+                mMediaMuxer = new MediaMuxer(tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            }catch (Exception e){
+                LogTool.e(TAG, "Create MediaMuxer with exception, ", e);
+                return false;
             }
         }
+
+        mAudioTrackIndex = mMediaMuxer.addTrack(AUDIO_FORMAT);
+        mVideoTrackIndex = mMediaMuxer.addTrack(VIDEO_FORMAT);
+
+        mMuxerDatas.clear();
+        AudioEncoder.getInstance().registerEncoderListener(this);
+        VideoEncoder.getInstance().registerEncoderListener(this);
+        mMuxering = true;
+        mWorkThread.start();
         return true;
     }
 
     public void stopMediaMuxer() {
-        if (!isMediaMuxerStart)
-            return;
-        mediaMuxer.stop();
-        mediaMuxer.release();
-        isMediaMuxerStart = false;
-        isAudioAdd = false;
-        isVideoAdd = false;
-        Log.d(TAG, "====停止媒体混合器=====");
+        LogTool.d(TAG, "Stop media muxer");
+        mMuxering = false;
+        if (mWorkThread != null) {
+            mWorkThread.interrupt();
+        }
+        AudioEncoder.getInstance().unRegisterEncoderListener(this);
+        VideoEncoder.getInstance().unRegisterEncoderListener(this);
     }
 
     @Override
     public void onAudioEncoded(EncoderBuffer buf) {
-        buf.increaseRef();
-        muxerDatas.offer(buf);
+        if(!mMuxering)
+            return;
+
+        ByteBuffer bufferSrc = buf.getByteBuffer();
+        MediaCodec.BufferInfo infoSrc = buf.getBufferInfo();
+        if (infoSrc.presentationTimeUs < mLastAudioFrameTimestamp) {
+            return;
+        } else {
+            mLastAudioFrameTimestamp = infoSrc.presentationTimeUs;
+        }
+
+        if (!isPPSAdded)
+            return;
+
+        EncoderBuffer encoderBuffer = mEncodBuf.getBuf(bufferSrc.remaining());
+        encoderBuffer.put(bufferSrc, infoSrc);
+        encoderBuffer.setTrack(TRACK_AUDIO);
+        mMuxerDatas.offer(encoderBuffer);
     }
 
     @Override
     public void onAudioFormatChanged(MediaFormat format) {
+        LogTool.d(TAG, "Audio format changed. " + format);
         AUDIO_FORMAT = format;
     }
 
     @Override
     public void onVideoEncoded(EncoderBuffer buf) {
-        buf.increaseRef();
-        muxerDatas.offer(buf);
+        if(!mMuxering)
+            return;
+
+        ByteBuffer bufferSrc = buf.getByteBuffer();
+        MediaCodec.BufferInfo infoSrc = buf.getBufferInfo();
+        if (infoSrc.presentationTimeUs < mLastVideoFrameTimestamp) {
+            return;
+        } else {
+            mLastVideoFrameTimestamp = infoSrc.presentationTimeUs;
+        }
+
+        int type = bufferSrc.get(4) & 0x1F;
+        if (type == 5 && !isPPSAdded){
+            VideoEncoder.PPS_BUFFER_INFO.presentationTimeUs = buf.getBufferInfo().presentationTimeUs;
+            EncoderBuffer tmpPPSBuffer = mEncodBuf.getBuf(VideoEncoder.PPS_BUFFER_INFO.size);
+            tmpPPSBuffer.put(VideoEncoder.PPS_BUFFER, VideoEncoder.PPS_BUFFER_INFO);
+            tmpPPSBuffer.setTrack(TRACK_VIDEO);
+            mLastVideoFrameTimestamp = buf.getBufferInfo().presentationTimeUs;
+            mMuxerDatas.offer(tmpPPSBuffer);
+            isPPSAdded = true;
+        }
+
+        if (!isPPSAdded)
+            return;
+        EncoderBuffer encoderBuffer = mEncodBuf.getBuf(bufferSrc.remaining());
+        encoderBuffer.put(bufferSrc, infoSrc);
+        encoderBuffer.setTrack(TRACK_VIDEO);
+        mMuxerDatas.offer(encoderBuffer);
     }
 
     @Override
     public void onVideoFormatChanged(MediaFormat format) {
+        LogTool.d(TAG, "Video format changed. " + format);
         VIDEO_FORMAT = format;
-    }
-
-    /**
-     * 封装需要传输的数据类型
-     */
-    public static class MuxerData {
-        int trackIndex;
-        ByteBuffer byteBuf;
-        MediaCodec.BufferInfo bufferInfo;
-
-        public MuxerData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-            this.trackIndex = trackIndex;
-            this.byteBuf = byteBuf;
-            this.bufferInfo = bufferInfo;
-        }
-
     }
 
     private String generateVideoFileName(){

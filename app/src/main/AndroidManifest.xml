@@ -32,22 +32,25 @@
             android:enabled="true"
             android:exported="true">
             <intent-filter android:priority="3">
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="com.zzdc.action.START_IP_CAMERA" />
-                <action android:name="com.zzdc.action.STOP_IP_CAMERA" />
-                <action android:name="android.intent.action.MEDIA_MOUNTED"/>
-                <action android:name="android.intent.action.MEDIA_EJECT" />
-                <category android:name="android.intent.category.HOME"/>
+                <action android:name="android.intent.action.MEDIA_MOUNTED" />
+                <data android:scheme="file"/>
             </intent-filter>
         </receiver>
 
-        <activity android:name=".controller.MainActivity"
+        <activity
+            android:name=".controller.MainActivity"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.VideosService"
+            android:enabled="true"
+            android:exported="true">
+        </service>
     </application>
 
 </manifest>

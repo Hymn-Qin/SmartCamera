@@ -1,22 +1,25 @@
 package com.zzdc.abb.smartcamera.TutkBussiness;
 
+import android.content.Context;
+import android.media.AudioManager;
 import android.text.TextUtils;
 import android.util.Log;
 
 import com.ptz.PTZControl.PTZControlCallBackContainer;
 import com.ptz.PTZControl.PTZControlManager;
 import com.ptz.motorControl.MotorCmd;
-import com.ptz.motorControl.MotorDevicePose;
 import com.ptz.motorControl.MotorManager;
 import com.tutk.IOTC.AVIOCTRLDEFs;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.AACDecoder;
-import com.zzdc.abb.smartcamera.controller.AlertVideoManager;
+import com.zzdc.abb.smartcamera.controller.AlertHistoryManager;
 import com.zzdc.abb.smartcamera.controller.AudioEncoder;
 import com.zzdc.abb.smartcamera.controller.AudioGather;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
 import com.zzdc.abb.smartcamera.controller.AvMediaTransfer;
 import com.zzdc.abb.smartcamera.controller.HistoryManager;
+import com.zzdc.abb.smartcamera.controller.MainActivity;
+import com.zzdc.abb.smartcamera.controller.PCMAudioDataTransfer;
 import com.zzdc.abb.smartcamera.controller.VideoEncoder;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
@@ -28,7 +31,6 @@ import java.io.UnsupportedEncodingException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 public class TutkCmdManager {
     private static final String TAG = TutkCmdManager.class.getSimpleName();
@@ -41,7 +43,7 @@ public class TutkCmdManager {
     private ApplicationSetting mAplicationSetting = null;
     private HistoryManager mHistoryManager;
 
-    private AlertVideoManager alertVideoManager;
+    private AlertHistoryManager alertVideoManager;
 
     public TutkCmdManager(TutkSession tutkSession) {
         mTutkSession = tutkSession;
@@ -149,7 +151,20 @@ public class TutkCmdManager {
                 mMotorManager.stopPath();
                 break;
             case "START_ONE_KEY_CALL":
-                Log.d(TAG, "START_ONE_KEY_CALL");
+                Log.d(TAG, "START_ONE_KEY_CALL CallState=" + MainActivity.CallState);
+                PCMAudioDataTransfer.getInstance().changeVoiceMode(PCMAudioDataTransfer.TELEPHONY_ON_MODE);
+                AudioManager audioManager = (AudioManager) MainActivity.getContext().getSystemService(Context.AUDIO_SERVICE);
+                int mode = audioManager.getMode();
+                Log.d(TAG, "mode=" + mode);
+                if (MainActivity.CallState == MainActivity.CallStateOff) {
+                    MainActivity.CallState = MainActivity.CallStateOn;
+                } else if (MainActivity.CallState == MainActivity.CallStateOn) {
+                    if (mTutkSession != null && mAACDecoder != null) {
+                        mTutkSession.unregistRemoteAudioDataMonitor(mAACDecoder);
+                        mAACDecoder.deinit();
+                        mAACDecoder = null;
+                    }
+                }
                 mAACDecoder = new AACDecoder();
                 mAACDecoder.SetAudioTrackTypeForCall();
                 mAACDecoder.init();
@@ -168,16 +183,22 @@ public class TutkCmdManager {
 
                 break;
             case "STOP_ONE_KEY_CALL":
-                Log.d(TAG, "STOP_ONE_KEY_CALL");
-                mTutkSession.releaseRemoteCallRes();
-                mTutkSession.unregistRemoteAudioDataMonitor(mAACDecoder);
-                mAACDecoder.SetAudioTrackTypeForMonitor();
-                mAACDecoder.deinit();
-                mAACDecoder = null;
+                Log.d(TAG, "STOP_ONE_KEY_CALL CallState=" + MainActivity.CallState);
+                MainActivity.CallState = MainActivity.CallStateOff;
+                if (mTutkSession != null) {
+                    mTutkSession.releaseRemoteCallRes();
+                    mTutkSession.unregistRemoteAudioDataMonitor(mAACDecoder);
+                }
+                if (mAACDecoder != null) {
+                    mAACDecoder.SetAudioTrackTypeForMonitor();
+                    mAACDecoder.deinit();
+                    mAACDecoder = null;
+                }
                 AudioGather.getInstance().stopRecord();
                 AudioGather.getInstance().SetAudioSourceTypeForMonitor();
                 AudioGather.getInstance().prepareAudioRecord();
                 AudioGather.getInstance().startRecord();
+                PCMAudioDataTransfer.getInstance().changeVoiceMode(PCMAudioDataTransfer.TELEPHONY_OFF_MODE);
                 break;
             case "START_MONITOR":
                 Log.d(TAG, "START_MONITOR");
@@ -262,16 +283,18 @@ public class TutkCmdManager {
                 try {
                     JSONObject jsonObject = new JSONObject(receiveJsonStr);
                     boolean POSE = jsonObject.getBoolean("POSE");
+
                     MotorCmd.DEVICE_POSE = POSE;
-                    MotorDevicePose motorDevicePose = MotorDevicePose.getInstance();
-                    motorDevicePose.setDevicePose(POSE);
+
+                    mAplicationSetting = ApplicationSetting.getInstance();
+                    mAplicationSetting.setDevicePose(POSE);
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
                 break;
             case "getAlertInfoList":
                 Log.d("qxj", " getAlertInfoList ");
-                alertVideoManager = AlertVideoManager.getInstance();
+                alertVideoManager = AlertHistoryManager.getInstance();
                 ArrayList<String> tmpAlertResponce = alertVideoManager.getHistoryVideoFileInfo();
 
                 for (String tmpRes : tmpAlertResponce) {
@@ -303,7 +326,7 @@ public class TutkCmdManager {
                     alertVideoManager.release();
                 } else {
                     Log.d("qxj", "Do setAlertVideo");
-                    alertVideoManager = AlertVideoManager.getInstance();
+                    alertVideoManager = AlertHistoryManager.getInstance();
                     if (alertVideoManager.handleHistoryVideo(tmpTime1) < 0) {
                         String tmpRet = "{" +
                                 "   \"ret\" : \"-1\"," +

@@ -5,7 +5,6 @@ import android.util.Log;
 
 import com.tutk.IOTC.AVFrame;
 import com.zzdc.abb.smartcamera.common.Constant;
-import com.zzdc.abb.smartcamera.info.FrameInfo;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
@@ -45,7 +44,6 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
 
     @Override
     public void onExtratorVideoDataReady(TutkFrame aFrame) {
-
         aFrame.increaseRef();
         mVideoQueue.offer(aFrame);
     }
@@ -87,6 +85,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         frame.setDataLen(dataLen);
         addADTStoPacket(frame.getData(), dataLen);
         buf.getByteBuffer().get(frame.getData(),7, buf.getBufferInfo().size);
+        buf.getByteBuffer().position(0);
         frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
 //        frame.getFrameInfo().timestamp = "1970-01-01 08:00:00";
 
@@ -129,6 +128,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
                 Log.e(TAG, "Copy data with exception.", e);
             }
         }
+        tmpOutBuf.position(0);
 
         frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
 //        frame.getFrameInfo().mType = "H264";

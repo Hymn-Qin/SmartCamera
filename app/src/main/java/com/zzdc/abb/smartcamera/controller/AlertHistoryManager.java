@@ -19,10 +19,10 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 
-public class HistoryManager {
+public class AlertHistoryManager {
 
-    private static final String TAG = HistoryManager.class.getSimpleName();
-    private static final HistoryManager mInstance = new HistoryManager();
+    private static final String TAG = AlertHistoryManager.class.getSimpleName();
+    private static final AlertHistoryManager mInstance = new AlertHistoryManager();
     private String mDestFile = null;
     private SDCardBussiness mSDCardBussiness;
     private long mVideoStartTime;        //视频文件时间
@@ -30,13 +30,13 @@ public class HistoryManager {
     public MP4Extrator mExtrator;
     private SQLiteDatabase db;
 
-    private HistoryManager(){
+    private AlertHistoryManager(){
         DataBaseHelper mDataBaseHelper = new DataBaseHelper(SmartCameraApplication.getContext());
         db = mDataBaseHelper.getWritableDatabase();
         mSDCardBussiness = SDCardBussiness.getInstance();
     }
 
-    public static HistoryManager getInstance(){
+    public static AlertHistoryManager getInstance(){
         return mInstance;
     }
 
@@ -57,7 +57,7 @@ public class HistoryManager {
 
         JSONArray timeQuantumArray = new JSONArray();
 
-        Cursor cursor = db.rawQuery("select * from "+DataBaseHelper.TIME_QUANTUM, null);
+        Cursor cursor = db.rawQuery("select * from "+ DataBaseHelper.TIME_QUANTUM, null);
         for (int i=0;i<(cursor.getCount());i++) {
             JSONObject oneTimeQuantum = new JSONObject();
             cursor.moveToPosition(i);
@@ -155,7 +155,7 @@ public class HistoryManager {
             return -1;
         }
         setVideoSatrtTime();
-        mDestFile = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM" + "/" + mDestFile;
+        mDestFile = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "ALERT" + "/" + mDestFile;
         if (mExtrator!= null){
             mExtrator.stop();
             mExtrator = null;

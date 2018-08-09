@@ -16,7 +16,7 @@ import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 import java.util.ArrayList;
 
 public class MotorManager {
-    private static final String TAG = "MotorManger";
+    private static final String TAG = MotorManager.class.getSimpleName();
 
     private boolean stopFlag = true;
     private static final String Receiver_BroadCast_Filter = "com.foxconn.household.get.view";
@@ -62,8 +62,8 @@ public class MotorManager {
         Thread moveStopThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1);
-                Log.d(TAG, "stopMove: ");
+                int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1);
+                Log.d(TAG, "stopMove:  ret = "+ret);
             }
         });
         moveStopThread.start();
@@ -77,16 +77,20 @@ public class MotorManager {
             public void run() {
                 if (MotorCmd.DEVICE_POSE) {
                     if ("false".equals(isLongPressStr)) {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        LogTool.d(TAG, "moveLeft:  ret=" + ret);
                     } else {
                         int maxStep = getHorizonMaxStep();
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        LogTool.d(TAG, "moveLeft   long press: ret=" + ret);
                     }
                 } else {
                     if ("false".equals(isLongPressStr)) {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        LogTool.d(TAG, "moveRight:  ret=" + ret);
                     } else {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        LogTool.d(TAG, "moveRight  long press: ret=" + ret);
                     }
                 }
 
@@ -103,16 +107,20 @@ public class MotorManager {
             public void run() {
                 if (MotorCmd.DEVICE_POSE) {
                     if ("false".equals(isLongPressStr)) {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_WIDDERSHINS, -1);
+                        LogTool.d(TAG, "moveRight:  ret=" + ret);
                     } else {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
+                        LogTool.d(TAG, "moveRight  long press: ret=" + ret);
                     }
                 } else {
                     if ("false".equals(isLongPressStr)) {
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_DEASIL, -1);
+                        LogTool.d(TAG, "moveLeft:  ret=" + ret);
                     } else {
                         int maxStep = getHorizonMaxStep();
-                        sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
+                        LogTool.d(TAG, "moveLeft   long press: ret=" + ret);
                     }
                 }
 
@@ -186,8 +194,9 @@ public class MotorManager {
             @Override
             public void run() {
                 Log.d(TAG, "run: " + "movePosition");
-                sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, horizontal);
-                sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, vertical);
+                int retH = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, horizontal);
+                int retV = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, vertical);
+                LogTool.d(TAG, "movePosition : retH=" + retH + ",retV=" + retV);
             }
         });
         movePositionThread.start();
@@ -197,6 +206,7 @@ public class MotorManager {
         int ret;
         int ret1 = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, horizontal);
         int ret2 = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, vertical);
+        LogTool.d(TAG, "moveSyncPosition : ret1=" + ret1 + ",ret2=" + ret2);
         if (ret1 >= 0 && ret2 >= 0)
             ret = 1;
         else
@@ -227,37 +237,37 @@ public class MotorManager {
         return sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_MAX_STEP, 0);
     }
 
-    public void startHorizontalPath(){
+    public void startHorizontalPath() {
         stopPath();
-        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Slow_Speed) >= 0){
-            LogTool.d(TAG,"set horizintal motor Frequency success");
+        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Slow_Speed) >= 0) {
+            LogTool.d(TAG, "set horizintal motor Frequency success");
         }
         if (startHoriziontalThread == null) {
             startHoriziontalThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     stopFlag = false;
-                    while(!stopFlag){
+                    while (!stopFlag) {
                         int ret = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
                         if (Thread.interrupted())
                             return;
-                        if (ret >= 0){
+                        if (ret >= 0) {
                             int maxStep = getHorizonMaxStep();
                             int ret2 = sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
                             if (Thread.interrupted())
                                 return;
-                            if (ret2 >= 0){
-                                LogTool.d(TAG,"startHorizontalPath success");
-                            }else {
+                            if (ret2 >= 0) {
+                                LogTool.d(TAG, "startHorizontalPath success");
+                            } else {
                                 stopFlag = true;
                                 startHoriziontalThread = null;
-                                LogTool.e(TAG,"startHorizontalPath error: turn to maxstep error, ret2="+ret2);
+                                LogTool.e(TAG, "startHorizontalPath error: turn to maxstep error, ret2=" + ret2);
                                 break;
                             }
-                        }else {
+                        } else {
                             stopFlag = true;
                             startHoriziontalThread = null;
-                            LogTool.e(TAG,"startHorizontalPath error: turn to 0 error,ret = "+ret);
+                            LogTool.e(TAG, "startHorizontalPath error: turn to 0 error,ret = " + ret);
                             break;
                         }
                     }
@@ -267,10 +277,10 @@ public class MotorManager {
         }
     }
 
-    public void startVerticalPath(){
+    public void startVerticalPath() {
         stopPath();
-        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Slow_Speed) >= 0){
-            LogTool.d(TAG,"set horizintal motor Frequency success");
+        if (sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Slow_Speed) >= 0) {
+            LogTool.d(TAG, "set horizintal motor Frequency success");
         }
         if (startVericalThread == null)
         {
@@ -278,27 +288,27 @@ public class MotorManager {
                 @Override
                 public void run() {
                     stopFlag = false;
-                    while(!stopFlag){
+                    while (!stopFlag) {
                         int ret = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, 0);
                         if (Thread.interrupted())
                             return;
-                        if (ret >= 0){
+                        if (ret >= 0) {
                             int maxStep = getVerticalMaxStep();
                             int ret2 = sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_TURN_TO, maxStep);
                             if (Thread.interrupted())
                                 return;
-                            if (ret2 >= 0){
-                                LogTool.d(TAG,"startVerticalPath success");
-                            }else {
+                            if (ret2 >= 0) {
+                                LogTool.d(TAG, "startVerticalPath success");
+                            } else {
                                 stopFlag = true;
                                 startVericalThread = null;
-                                LogTool.e(TAG,"startVerticalPath error: turn to maxstep error");
+                                LogTool.e(TAG, "startVerticalPath error: turn to maxstep error");
                                 break;
                             }
                         } else {
                             stopFlag = true;
                             startVericalThread = null;
-                            LogTool.e(TAG,"startVerticalPath error: turn to 0 error,ret = "+ret);
+                            LogTool.e(TAG, "startVerticalPath error: turn to 0 error,ret = " + ret);
                             break;
                         }
                     }
@@ -324,12 +334,12 @@ public class MotorManager {
                 public void run() {
                     stopFlag = false;
 //                    LogTool.d(TAG,"x ="+arrayList.get(0).xAxis+",y= "+arrayList.get(0).yAxis+",sleepTime="+arrayList.get(0).sleepTime);
-                    if (moveSyncPosition(arrayList.get(0).xAxis, arrayList.get(0).yAxis) >= 0){
-                        LogTool.d(TAG,"starPath move to 0 position success");
-                    }else {
+                    if (moveSyncPosition(arrayList.get(0).xAxis, arrayList.get(0).yAxis) >= 0) {
+                        LogTool.d(TAG, "starPath move to 0 position success");
+                    } else {
                         stopFlag = true;
                         startPathThread = null;
-                        LogTool.d(TAG,"starPath error");
+                        LogTool.d(TAG, "starPath error");
                         return;
                     }
                     if (Thread.interrupted())
@@ -346,10 +356,10 @@ public class MotorManager {
                         for (int i = 1; i < arrayList.size(); i++) {
                             if (Thread.interrupted())
                                 return;
-                            if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0){
-                                LogTool.d(TAG,"starPath move to "+i+" position success, xAxis="+arrayList.get(i).xAxis+",yAxis="+arrayList.get(i).yAxis);
-                            }else {
-                                LogTool.d(TAG,"starPath error");
+                            if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0) {
+                                LogTool.d(TAG, "starPath move to " + i + " position success, xAxis=" + arrayList.get(i).xAxis + ",yAxis=" + arrayList.get(i).yAxis);
+                            } else {
+                                LogTool.d(TAG, "starPath error");
                                 stopFlag = true;
                                 startPathThread = null;
                                 return;
@@ -369,10 +379,10 @@ public class MotorManager {
                         for (int i = arrayList.size() - 1; i >= 0; i--) {
                             if (Thread.interrupted())
                                 return;
-                            if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0){
-                                LogTool.d(TAG,"starPath move to "+i+" position success");
-                            }else {
-                                LogTool.d(TAG,"starPath error");
+                            if (moveSyncPosition(arrayList.get(i).xAxis, arrayList.get(i).yAxis) >= 0) {
+                                LogTool.d(TAG, "starPath move to " + i + " position success");
+                            } else {
+                                LogTool.d(TAG, "starPath error");
                                 stopFlag = true;
                                 startPathThread = null;
                                 return;
@@ -410,26 +420,26 @@ public class MotorManager {
             startPathThread = null;
             pathPositionsArrayList = null;
         }
-        if(sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath  HORIZONTAL_MOTOR success");
-        }else {
-            LogTool.e(TAG,"stopPath VERTICAL_MOTOR  failed");
+        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0) {
+            LogTool.d(TAG, "stopPath  HORIZONTAL_MOTOR success");
+        } else {
+            LogTool.e(TAG, "stopPath VERTICAL_MOTOR  failed");
         }
-        if(sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-            LogTool.d(TAG,"stopPath VERTICAL_MOTOR  success");
-        }else {
-            LogTool.e(TAG,"stopPath  VERTICAL_MOTOR failed");
+        if (sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0) {
+            LogTool.d(TAG, "stopPath VERTICAL_MOTOR  success");
+        } else {
+            LogTool.e(TAG, "stopPath  VERTICAL_MOTOR failed");
         }
 
-        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
-            LogTool.d(TAG,"set horizintal motor Frequency success");
-        }else {
-            LogTool.e(TAG,"set horizintal motor Frequency  failed");
+        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Normal_Speed) >= 0) {
+            LogTool.d(TAG, "set horizintal motor Frequency success");
+        } else {
+            LogTool.e(TAG, "set horizintal motor Frequency  failed");
         }
-        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
-            LogTool.d(TAG,"set vertical motor Frequency success");
-        }else {
-            LogTool.e(TAG,"set vertical motor Frequency  failed");
+        if (sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Normal_Speed) >= 0) {
+            LogTool.d(TAG, "set vertical motor Frequency success");
+        } else {
+            LogTool.e(TAG, "set vertical motor Frequency  failed");
         }
     }
 
@@ -552,20 +562,20 @@ public class MotorManager {
                         } else {
                             LogTool.e(TAG, "stopPath failed");
                         }
-                        if(sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0){
-                            LogTool.d(TAG,"stopPath VERTICAL_MOTOR  success");
-                        }else {
-                            LogTool.e(TAG,"stopPath  VERTICAL_MOTOR failed");
+                        if (sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_STOP, -1) >= 0) {
+                            LogTool.d(TAG, "stopPath VERTICAL_MOTOR  success");
+                        } else {
+                            LogTool.e(TAG, "stopPath  VERTICAL_MOTOR failed");
                         }
-                        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
-                            LogTool.d(TAG,"set horizintal motor Frequency success");
-                        }else {
-                            LogTool.e(TAG,"set horizintal motor Frequency  failed");
+                        if (sendCmd(MotorCmd.HORIZONTAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Normal_Speed) >= 0) {
+                            LogTool.d(TAG, "set horizintal motor Frequency success");
+                        } else {
+                            LogTool.e(TAG, "set horizintal motor Frequency  failed");
                         }
-                        if (sendCmd(MotorCmd.VERTICAL_MOTOR,MotorCmd.MOTOR_SET_INTERVAL,Normal_Speed) >= 0){
-                            LogTool.d(TAG,"set vertical motor Frequency success");
-                        }else {
-                            LogTool.e(TAG,"set vertical motor Frequency  failed");
+                        if (sendCmd(MotorCmd.VERTICAL_MOTOR, MotorCmd.MOTOR_SET_INTERVAL, Normal_Speed) >= 0) {
+                            LogTool.d(TAG, "set vertical motor Frequency success");
+                        } else {
+                            LogTool.e(TAG, "set vertical motor Frequency  failed");
                         }
                         //path stop end
 

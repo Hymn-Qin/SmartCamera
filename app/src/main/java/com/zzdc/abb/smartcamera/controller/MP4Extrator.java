@@ -5,40 +5,35 @@ import android.media.MediaFormat;
 import android.util.Log;
 
 import com.tutk.IOTC.AVFrame;
-import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.ByteToHexTool;
+import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class MP4Extrator {
+    private static final  String TAG = MP4Extrator.class.getSimpleName();
+    private static final boolean DEBUG = true;
+
     private MediaExtractor mVideoExtractor;
     private MediaExtractor mAudioExtractor;
-    private static final  String TAG = MP4Extrator.class.getSimpleName();
     private boolean mIsWorking = false;
-    private boolean mIsDoSend = false;
     private String mDestFilePath ;
     private long mDestTime;
-    private long mVideoSatrtTimeStamp;   //视频内部时间
     private long mVideoStartTime;        //视频文件时间
     private int mAudioTrackIndex = -1;
     private int mVideoTrackIndex = -1;
 
-    ByteBuffer mAudioByteBuffer = ByteBuffer.allocate(500 * 1024);
-    ByteBuffer mVideoByteBuffer = ByteBuffer.allocate(500 * 1024);
     private Thread mExtratorThread;
     private BufferPool<TutkFrame> mVideoBufPool = new BufferPool<>(TutkFrame.class, 3);
     private BufferPool<TutkFrame> mAudioBufPool = new BufferPool<>(TutkFrame.class, 3);
     private CopyOnWriteArrayList<ExtratorDataListenner> mListenrs = new CopyOnWriteArrayList<>();
 
-    byte[]PPS = new byte[]{
+    private byte[] PPS = new byte[]{
         (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x67,
                 (byte)0x42, (byte)0x80, (byte)0x1E, (byte)0xDA, (byte)0x02,
                 (byte)0x80, (byte)0xF6, (byte)0x94, (byte)0x82, (byte)0x81,
@@ -46,223 +41,155 @@ public class MP4Extrator {
                 (byte)0x80, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01,
                 (byte)0x68, (byte)0xCE, (byte)0x06, (byte)0xE2};
 
-    public MP4Extrator(String aFilePath, long aDestTime, long aVideoStartTime){
-
+    MP4Extrator(String aFilePath, long aDestTime, long aVideoStartTime){
         mDestFilePath = aFilePath;
         mDestTime = aDestTime;
         mVideoStartTime = aVideoStartTime;
-
     }
-    public  int init(){
-        Log.d(TAG,"mDestFilePath = " + mDestFilePath);
+
+    public boolean init(){
+        LogTool.d(TAG,"mDestFilePath = " + mDestFilePath);
         File tmpFile = new File(mDestFilePath);
-        if (tmpFile == null || ! tmpFile.exists() || tmpFile.length() == 0) {
-            Log.d(TAG,"文件不存在");
+        if (!tmpFile.exists() || tmpFile.length() == 0) {
+            LogTool.w(TAG,"File not exist");
             mIsWorking = false;
-            return -1;
-        }else {
+            return false;
+        } else {
             mVideoExtractor = new MediaExtractor();
             mAudioExtractor = new MediaExtractor();
-            int tmpVideoTrack = -1;
-            int tmpAudioTrack = -1;
-
             try {
                 mAudioExtractor.setDataSource(mDestFilePath);
                 mVideoExtractor.setDataSource(mDestFilePath);
             } catch (IOException e) {
-                e.printStackTrace();
-                Log.d(TAG,"setDataSource IOException " + e.toString());
-                return -2;
+                LogTool.w(TAG, "Set data source for extractor with exception", e);
+                return false;
             }
-
-
-            int tmpVideoTrackCount = mVideoExtractor.getTrackCount();
-            int tmpAudioTrackCount = mAudioExtractor.getTrackCount();
-            for (int i = 0; i < tmpVideoTrackCount; i++){
+            int trackCount = mVideoExtractor.getTrackCount();
+            for (int i = 0; i < trackCount; i++){
                 MediaFormat tmpFormat = mVideoExtractor.getTrackFormat(i);
                 String mineType = tmpFormat.getString(MediaFormat.KEY_MIME);
-                //视频信道
+                LogTool.d(TAG, "Find track: " + mineType);
                 if (mineType.startsWith("video/")) {
                     mVideoTrackIndex = i;
-                    break;
-                }
-            }
-
-            for (int i = 0; i < tmpAudioTrackCount; i++) {
-                MediaFormat tmpFormat = mAudioExtractor.getTrackFormat(i);
-                String mineType = tmpFormat.getString(MediaFormat.KEY_MIME);
-                //音频信道
-                if (mineType.startsWith("audio/")) {
+                } else if (mineType.startsWith("audio/")) {
                     mAudioTrackIndex = i;
-                    break;
                 }
             }
 
-        }
+            if (mVideoTrackIndex == -1 || mAudioTrackIndex == -1) {
+                LogTool.w(TAG, "Doesn't found audio/video track. video track = " + mVideoTrackIndex + ", audio track = " + mAudioTrackIndex);
+                return false;
+            }
 
-        try{
             mVideoExtractor.selectTrack(mVideoTrackIndex);
             mAudioExtractor.selectTrack(mAudioTrackIndex);
-        }catch (Exception e){
-            Log.d(TAG,"selectTrack Exception " + e.toString());
-            return -3;
+
+            return true;
         }
-
-
-        return 0;
     }
 
-    public void start(){
-        mExtratorThread = new Thread("ExtratorThread"){
+    public void start() {
+        mExtratorThread = new Thread("Extractor Thread"){
             @Override
             public void run() {
                 super.run();
-                    extraMP4();
-            }
-        };
-        mExtratorThread.start();
-        mIsWorking = true;
-    }
 
-    private void extraMP4(){
+                LogTool.d(TAG, "File time = " + mVideoStartTime + ", dest time = " + mDestTime);
+                long firstSampleTime = mVideoExtractor.getSampleTime();
+                long offset = Math.max(0, mDestTime - mVideoStartTime);
+                long seekTime = firstSampleTime + offset * 1000;
+                LogTool.d(TAG,"First sample time = " + firstSampleTime + ", offset = " + offset + ", seek time  = " + seekTime);
+                mVideoExtractor.seekTo(seekTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                mAudioExtractor.seekTo(seekTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
 
-        Log.d(TAG,"extraMP4");
-        TutkFrame tmpVideoFrame = null;
-        TutkFrame tmpAudioFrame = null;
-        long tmpSeekTime = mDestTime - mVideoStartTime;
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        int i = 0;
-        while(mIsWorking){
-            try{
-                long tmpTime = mVideoExtractor.getSampleTime();
-                if(i == 0){
-                    mVideoSatrtTimeStamp = mVideoExtractor.getSampleTime();
-                if(tmpSeekTime > 0)
-                {
-                    Log.d(TAG,"mVideoSatrtTimeStamp = " + mVideoSatrtTimeStamp + " seekTo = " + ((tmpSeekTime * 1000) + mVideoSatrtTimeStamp));
-                    mVideoExtractor.seekTo((tmpSeekTime * 1000) + mVideoSatrtTimeStamp , MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-                    mAudioExtractor.seekTo((tmpSeekTime * 1000) + mVideoSatrtTimeStamp , MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-                }
+                long beginExtractTime = System.currentTimeMillis();
 
-                }
+                ByteBuffer audioByteBuffer = ByteBuffer.allocate(500 * 1024);
+                ByteBuffer videoByteBuffer = ByteBuffer.allocate(500 * 1024);
+                while(mIsWorking && !interrupted()) {
+                    long sampleTime = mVideoExtractor.getSampleTime();
 
-                int tmpVideoSampleCount = mVideoExtractor.readSampleData(mVideoByteBuffer, 0);
-                int tmpAudioSampleCount = mAudioExtractor.readSampleData(mAudioByteBuffer, 0);
-                Log.d(TAG,"tmpVideoSampleCount = " + tmpVideoSampleCount);
-                if (tmpVideoSampleCount < 0) {
-                    mIsWorking = false;
-                    break;
-                }
-
-                long tmpDurion = tmpTime - mVideoSatrtTimeStamp;
-                long tmpRecodingTime = mVideoStartTime + (tmpDurion/1000);
-
-                Date tmpTime2 = new Date(tmpRecodingTime);
-                ByteBuffer tmpBuffer = mVideoByteBuffer;
-                int type = tmpBuffer.get(4)& 0x1F;
-                if (type == 7 || type == 8) {
-                    //sps
-                    Log.d(TAG,"before copy pps");
-                    byte[] tmpPPS = new byte[tmpVideoSampleCount];
-                    tmpBuffer.get(tmpPPS, 0, tmpVideoSampleCount);
-                    PPS = tmpPPS;
-                    Log.d(TAG,"配置帧信息：" + ByteToHexTool.bytesToHex(tmpPPS));
-                    Log.d(TAG,"after copy pps");
-                } else if (type == 5) {
-                    Log.d(TAG,"发现关键帧");
-                    if(PPS == null){
-                        Log.d(TAG,"PPS " + ByteToHexTool.bytesToHex(PPS));
-                        PPS = Constant.PPS;
-                    }else {
-                        Log.d(TAG,"PPS " + ByteToHexTool.bytesToHex(PPS));
+                    long time = System.currentTimeMillis();
+                    long extractDuration = time - beginExtractTime;
+                    long sampleDuration = (sampleTime - seekTime)/1000;
+                    if (sampleDuration > extractDuration) {
+                        try {
+                            sleep(sampleDuration - extractDuration);
+                        } catch (InterruptedException e) {
+                            LogTool.w(TAG, "Interrupted, ", e);
+                            break;
+                        }
                     }
 
-                    //tutk 标签
-                    if (PPS != null && PPS.length > 0) {
+                    int videoSampleSize = mVideoExtractor.readSampleData(videoByteBuffer, 0);
+                    debug("Extract video SampleCount = " + videoSampleSize);
+                    if (videoSampleSize < 0) {
+                        mIsWorking = false;
+                        break;
+                    }
+                    long tmpRecodingTime = mVideoStartTime + ((sampleTime - firstSampleTime)/1000);
 
-                        tmpVideoFrame = mVideoBufPool.getBuf(PPS.length + tmpVideoSampleCount);
-                        tmpVideoFrame.setDataLen(PPS.length + tmpVideoSampleCount);
-                        System.arraycopy(PPS, 0, tmpVideoFrame.getData(), 0, PPS.length);
-
-                        try {
-
-                            mVideoByteBuffer.get(tmpVideoFrame.getData(), PPS.length, tmpVideoSampleCount);
-                        } catch (Exception e) {
-                            Log.d(TAG, "COPY PPS AND DATA exception " + e);
+                    TutkFrame videoFrame = null;
+                    int type = videoByteBuffer.get(4)& 0x1F;
+                    if (type == 7 || type == 8) {
+                        byte[] tmpPPS = new byte[videoSampleSize];
+                        videoByteBuffer.get(tmpPPS, 0, videoSampleSize);
+                        PPS = tmpPPS;
+                        debug("PPS frame, PPS: " + ByteToHexTool.bytesToHex(tmpPPS));
+                    } else if (type == 5) {
+                        if (PPS != null && PPS.length > 0) {
+                            debug("Key frame, PPS length = " + PPS.length);
+                            videoFrame = mVideoBufPool.getBuf(PPS.length + videoSampleSize);
+                            videoFrame.setDataLen(PPS.length + videoSampleSize);
+                            System.arraycopy(PPS, 0, videoFrame.getData(), 0, PPS.length);
+                            videoByteBuffer.get(videoFrame.getData(), PPS.length, videoSampleSize);
+                        } else {
+                            debug("Key frame, PPS is empty");
+                            videoFrame = mVideoBufPool.getBuf(videoSampleSize);
+                            videoFrame.setDataLen(videoSampleSize);
+                            videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
                         }
                     } else {
-                        Log.d(TAG,"发现关键帧，但配置帧为空");
-                        tmpVideoFrame = mVideoBufPool.getBuf(tmpVideoSampleCount);
-                        tmpVideoFrame.setDataLen(tmpVideoSampleCount);
-
-                        try {
-                            mVideoByteBuffer.get(tmpVideoFrame.getData(), 0, tmpVideoSampleCount);
-                        } catch (Exception e) {
-                            Log.d(TAG, "Exception " + e.toString());
-                        }
+                        debug("Normal frame");
+                        videoFrame = mVideoBufPool.getBuf(videoSampleSize);
+                        videoFrame.setDataLen(videoSampleSize);
+                        videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
                     }
-
-                } else {
-
-                    tmpVideoFrame = mVideoBufPool.getBuf(tmpVideoSampleCount);
-                    tmpVideoFrame.setDataLen(tmpVideoSampleCount);
-                    try {
-
-                        mVideoByteBuffer.get(tmpVideoFrame.getData(), 0, tmpVideoSampleCount);
-                    } catch (Exception e) {
-                        Log.d(TAG, "3333 Exception " + e.toString());
-                    }
-                }
-
-
-                //新的
-
-                tmpVideoFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
-                tmpVideoFrame.getFrameInfo().timestamp = tmpRecodingTime;
-//            tmpVideoFrame.getFrameInfo().mType = "H264";
-//            tmpVideoFrame.getFrameInfo().timestamp = sdf.format(tmpTime2);
-                for (int j= 0;j< mListenrs.size();j++){
-                    mListenrs.get(j).onExtratorVideoDataReady(tmpVideoFrame);
-                }
-                tmpVideoFrame.decreaseRef();
-                mVideoByteBuffer.clear();
-
-
-
-                //保存音频信道信息
-                if(tmpAudioSampleCount > 0){
-
-
-                    int dataLen = tmpAudioSampleCount + 7;
-                    TutkFrame frame = mAudioBufPool.getBuf(dataLen);
-                    frame.setDataLen(dataLen);
-
-                    addADTStoPacket(frame.getData(), dataLen);
-                    mAudioByteBuffer.get(frame.getData(), 7,tmpAudioSampleCount);
-                    frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
-                    frame.getFrameInfo().timestamp = tmpRecodingTime;
-
-//                frame.getFrameInfo().mType = "AAC";
-//                frame.getFrameInfo().timestamp = sdf.format(tmpTime2);
-//                mAudioQueue.offer(frame);
+                    videoFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
+                    videoFrame.getFrameInfo().timestamp = tmpRecodingTime;
                     for (int j= 0;j< mListenrs.size();j++){
-                        mListenrs.get(j).onExtratorAudioDataReady(frame);
+                        mListenrs.get(j).onExtratorVideoDataReady(videoFrame);
                     }
-                    frame.decreaseRef();
+                    videoFrame.decreaseRef();
+                    videoByteBuffer.clear();
 
+                    int audioSampleSize = mAudioExtractor.readSampleData(audioByteBuffer, 0);
+                    if(audioSampleSize > 0){
+                        int dataLen = audioSampleSize + ADT_SIZE;
+                        TutkFrame audioFrame = mAudioBufPool.getBuf(dataLen);
+                        audioFrame.setDataLen(dataLen);
+
+                        addADTStoPacket(audioFrame.getData(), dataLen);
+                        audioByteBuffer.get(audioFrame.getData(), ADT_SIZE, audioSampleSize);
+                        audioFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
+                        audioFrame.getFrameInfo().timestamp = tmpRecodingTime;
+
+                        for (int j= 0;j< mListenrs.size();j++){
+                            mListenrs.get(j).onExtratorAudioDataReady(audioFrame);
+                        }
+                        audioFrame.decreaseRef();
+                    }
+                    audioByteBuffer.clear();
+
+                    mVideoExtractor.advance();
+                    mAudioExtractor.advance();
                 }
-
-                mAudioByteBuffer.clear();
-                mVideoExtractor.advance();//移动到下一帧
-                mAudioExtractor.advance();//移动到下一帧
-            }catch(Exception e){
-                Log.d(TAG,"Exception " + e.toString());
+                //TODO Notify the extract stop reason.
             }
-            
-            i++;
-        }
+        };
+        mIsWorking = true;
+        mExtratorThread.start();
     }
-
 
     public void stop(){
         mIsWorking = false;
@@ -271,11 +198,12 @@ public class MP4Extrator {
         mExtratorThread.interrupt();
     }
 
+    private static final int ADT_SIZE = 7;
     private void addADTStoPacket(byte[] packet, int packetLen) {
         int profile = 2; // AAC LC
         int freqIdx = 8; // 16 KHz
         int chanCfg = 2; // CPE
-        // fill in ADTS data
+
         packet[0] = (byte)0xFF;
         packet[1] = (byte)0xF9;
         packet[2] = (byte)(((profile-1)<<6) + (freqIdx<<2) +(chanCfg>>2));
@@ -284,16 +212,11 @@ public class MP4Extrator {
         packet[5] = (byte)(((packetLen&7)<<5) + 0x1F);
         packet[6] = (byte)0xFC;
         Log.d(TAG,"packetLen = " + packetLen + " packet " + packet.length);
-
     }
-    /*
-     * 文件视频数据接口
-     *
-     *
-     **/
+
     public interface ExtratorDataListenner{
-        public void onExtratorVideoDataReady(TutkFrame aFrame);
-        public void onExtratorAudioDataReady(TutkFrame aFrame);
+        void onExtratorVideoDataReady(TutkFrame aFrame);
+        void onExtratorAudioDataReady(TutkFrame aFrame);
     }
 
     public void registerExtratorListener(ExtratorDataListenner aListenner){
@@ -304,5 +227,11 @@ public class MP4Extrator {
 
     public void unRegisterExtratorListener(ExtratorDataListenner aListenner){
         mListenrs.remove(aListenner);
+    }
+
+    private void debug(String msg) {
+        if (DEBUG) {
+            LogTool.d(TAG, msg);
+        }
     }
 }

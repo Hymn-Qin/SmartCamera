@@ -8,17 +8,16 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class LogTool {
     private static final String TAG = "LogTool";
     private static final String APP_TAG = "smartcamera.";
-    private static final String LOG_FOLDER = "com.zzdc.zhipengli.smartcamera";
+    private static final String LOG_FOLDER = "com.zzdc.abb.smartcamera";
     private static final String LOG_PATH = android.os.Environment
             .getExternalStorageDirectory().getAbsolutePath() + File.separator
             + LOG_FOLDER;
-    private static final String LOG_FILE = android.os.Environment
-            .getExternalStorageDirectory().getAbsolutePath() + File.separator
-            + LOG_FOLDER + File.separator + "log.txt";
+    private static final String LOG_FILE = LOG_PATH + File.separator + "log.txt";
 
     private static final int LOG_VERBOSE = 0;
     private static final int LOG_DEBUG = 1;
@@ -26,7 +25,7 @@ public class LogTool {
     private static final int LOG_WARN = 3;
     private static final int LOG_ERROR = 4;
 
-    private static final int LOG_LEVEL = LOG_VERBOSE;
+    private static final int LOG_LEVEL = LOG_DEBUG;
     private static boolean LOG_TO_FILE = false;
 
     public static void v(String tag, String msg) {
@@ -39,7 +38,7 @@ public class LogTool {
             Log.v(tag, msg, tr);
         }
         if (LOG_TO_FILE) {
-            logtoFile("V", tag, msg, tr);
+            logToFile("V", tag, msg, tr);
         }
     }
 
@@ -53,7 +52,7 @@ public class LogTool {
             Log.d(tag, msg, tr);
         }
         if (LOG_TO_FILE) {
-            logtoFile("D", tag, msg, tr);
+            logToFile("D", tag, msg, tr);
         }
     }
 
@@ -67,7 +66,7 @@ public class LogTool {
             Log.i(tag, msg, tr);
         }
         if (LOG_TO_FILE) {
-            logtoFile("I", tag, msg, tr);
+            logToFile("I", tag, msg, tr);
         }
     }
 
@@ -81,7 +80,7 @@ public class LogTool {
             Log.w(tag, msg, tr);
         }
         if (LOG_TO_FILE) {
-            logtoFile("W", tag, msg, tr);
+            logToFile("W", tag, msg, tr);
         }
     }
 
@@ -95,27 +94,31 @@ public class LogTool {
             Log.e(tag, msg, tr);
         }
         if (LOG_TO_FILE) {
-            logtoFile("E", tag, msg, tr);
+            logToFile("E", tag, msg, tr);
         }
     }
 
     public static void callStack(String tag, String msg) {
         tag = appendTag(tag);
-        StringBuilder sb = new StringBuilder();
-        sb.append(msg).append("\n").append(track());
-        Log.d(tag, sb.toString());
+        String s = msg + "\n" + track();
+        Log.d(tag, s);
+
         if (LOG_TO_FILE) {
-            logtoFile("D", tag, msg, null);
+            logToFile("D", tag, s, null);
         }
+    }
+
+    private static String appendTag(String tag) {
+        return APP_TAG + tag;
     }
 
     private static String track() {
         StackTraceElement[] straceTraceElements = Thread.currentThread()
                 .getStackTrace();
         int length = straceTraceElements.length;
-        String file = "";
-        int line = 0;
-        String method = "";
+        String file;
+        int line;
+        String method;
         StringBuilder sb = new StringBuilder();
         for (int i = 4; i < length; i++) {
             file = straceTraceElements[i].getFileName();
@@ -127,51 +130,84 @@ public class LogTool {
         return sb.toString();
     }
 
-    /**
-     * open log file and write to file
-     * 
-     * @return
-     **/
-    private static void logtoFile(String mylogtype, String tag, String text,
-                                  Throwable tr) {
-        Date nowtime = new Date();
-        SimpleDateFormat myLogSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        StringBuilder logText = new StringBuilder();
-        logText.append(myLogSdf.format(nowtime)).append("\t");
-        logText.append(mylogtype).append("\t");
-        logText.append(tag).append("\t");
-        logText.append(text).append("\n");
-        logText.append(Log.getStackTraceString(tr));
-
-        File logFolder = new File(LOG_PATH);
-        if (!logFolder.exists()) {
-            Log.d(TAG, "Create log folder " + logFolder.mkdirs());
+    private static ThreadLocal<SimpleDateFormat> mLocalFormat = new ThreadLocal<SimpleDateFormat>() {
+        @Override
+        protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
         }
-        File logFile = new File(LOG_FILE);
-        if (!logFile.exists()) {
-            try {
-                Log.d(TAG, "Create log file " + logFile.createNewFile());
-            } catch (IOException e) {
-                Log.d(TAG, "", e);
+    };
+    private static void logToFile(String logType, String tag, String text, Throwable tr) {
+        String log = mLocalFormat.get().format(new Date()) + "\t"
+                + logType + "/" + tag + "\t"
+                + text + "\n"
+                + Log.getStackTraceString(tr);
+        writeLogToFile(log);
+    }
+
+    private static LinkedBlockingQueue<String> mLogQueue = new LinkedBlockingQueue<>();
+    private static void writeLogToFile(String log) {
+        mLogQueue.offer(log);
+        startWriterThreadIfNot();
+    }
+
+    private static void startWriterThreadIfNot() {
+        if (!mWriterThreadRunning) {
+            if(getLogFile() != null) {
+                mWriterThreadRunning = true;
+                mWriteThread.start();
             }
         }
+    }
 
-        try {
-            OutputStreamWriter writer = null;
-            writer = new OutputStreamWriter(new FileOutputStream(logFile, true),
-                    "UTF-8");
-            writer.write(logText.toString());
-            writer.close();
-        } catch (IOException e1) {
-            Log.e(TAG, "", e1);
+    private static File mLogFile = null;
+    private static File getLogFile() {
+        if (mLogFile == null) {
+            File logFolder = new File(LOG_PATH);
+            if (!logFolder.exists()) {
+                try {
+                    if (logFolder.mkdirs()) {
+                        Log.d(TAG, "Create log folder succeed. " + LOG_PATH);
+                    } else {
+                        Log.w(TAG, "Create log folder failed. " + LOG_PATH);
+                        return null;
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Create log folder with exception, ", e);
+                    return null;
+                }
+            }
+            File logFile = new File(LOG_FILE);
+            try {
+                if (logFile.createNewFile()) {
+                    Log.d(TAG, "Create log file: " + LOG_FILE);
+                } else {
+                    Log.d(TAG, "Log file: " + LOG_FILE + " has exist already.");
+                }
+            } catch (IOException e) {
+                Log.w(TAG, "Create log file with exception, ", e);
+                return null;
+            }
+            mLogFile = logFile;
         }
+        return mLogFile;
     }
 
-    private static String appendTag(String tag) {
-        return APP_TAG + tag;
-    }
-
-    public static void setLogToFile(boolean logToFile) {
-        LOG_TO_FILE = logToFile;
-    }
+    private static boolean mWriterThreadRunning = false;
+    private static Thread mWriteThread = new Thread("LogTool write thread") {
+        @Override
+        public void run() {
+            super.run();
+            while (mWriterThreadRunning) {
+                try {
+                    String log = mLogQueue.take();
+                    FileOutputStream oStream = new FileOutputStream(mLogFile, true);
+                    OutputStreamWriter writer = new OutputStreamWriter(oStream, "UTF-8");
+                    writer.write(log);
+                    writer.close();
+                } catch (InterruptedException | IOException e) {
+                    Log.w(TAG, "Writer log with exception, ", e);
+                }
+            }
+        }
+    };
 }

@@ -16,7 +16,7 @@ import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class AudioEncoder implements AudioGather.AudioRawDataListener{
@@ -34,7 +34,12 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
     private long mStartTime;
 
     private LinkedBlockingQueue<AudioGather.AudioBuf> mAudioRawDataQueue = new LinkedBlockingQueue<>();
+    //TODO remove
     private BufferPool<EncoderBuffer> mEncodeBufPool = new BufferPool<>(EncoderBuffer.class, 3);;
+
+    private Thread mInputThread;
+    public volatile boolean audioEncoderLoop = false;
+    private LinkedBlockingQueue<Message> mInputIndexQueue = new LinkedBlockingQueue<>();
 
     private AudioEncoder() {}
     private static AudioEncoder mInstance = new AudioEncoder();
@@ -58,35 +63,81 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
         }
     };
 
-    private HandlerThread mInputThread = new HandlerThread("Audio encode input thread");
-    {
-        mInputThread.start();
-    }
-    private Handler mInputHandler = new Handler(mInputThread.getLooper()) {
+    class InputThread extends Thread {
+
+
         @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            MediaCodec mediaCodec = (MediaCodec)msg.obj;
-            int i = msg.arg1;
-            try {
-                AudioGather.AudioBuf audioRawBuf = mAudioRawDataQueue.take();
-                debug("Handle onInputBufferAvailable, buffer index = " + i);
-                ByteBuffer buffer = mediaCodec.getInputBuffer(i);
-                buffer.put(audioRawBuf.getData());
-                audioRawBuf.decreaseRef();
-                long pts = System.currentTimeMillis() * 1000 - mStartTime;
-                if (!mEncoding) {
-                    Log.d(TAG, "Send Audio Encoder with flag BUFFER_FLAG_END_OF_STREAM");
-                    mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                    mAudioRawDataQueue.clear();
-                } else {
-                    mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, 0);//TODO check the flag
+        public void run() {
+            super.run();
+            while (audioEncoderLoop && !Thread.interrupted()){
+                try {
+                    int i = mInputIndexQueue.take().arg1;
+                    if (i >= 0){
+                        AudioGather.AudioBuf tmpBuffer = mAudioRawDataQueue.take();
+                        debug("Handle onInputBufferAvailable, buffer index = " + i);
+                        ByteBuffer inputBuffer = mEncoder.getInputBuffer(i);
+                        inputBuffer.put(tmpBuffer.getData());
+                        tmpBuffer.decreaseRef();
+
+                        long pts = System.currentTimeMillis() * 1000 - mStartTime;
+                        if (!mEncoding) {
+                            Log.d(TAG, "Send Audio Encoder with flag BUFFER_FLAG_END_OF_STREAM");
+                            mEncoder.queueInputBuffer(i, 0, tmpBuffer.getData().length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            mAudioRawDataQueue.clear();
+                        }else{
+                            mEncoder.queueInputBuffer(i, 0, tmpBuffer.getData().length, pts, 0);
+                        }
+                    }
+
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-            } catch (InterruptedException e) {
-                LogTool.w(TAG, "Take Audio raw data from queue with exception. ", e);
+
             }
+            unregisterAudioRawDataListener();
+            if(mEncoder!=null){
+                mEncoder.reset();
+            }
+            mInputIndexQueue.clear();
+            mAudioRawDataQueue.clear();
+            Log.d(TAG, "Encoder input thread stop. InputIndex_Que size ="+mInputIndexQueue.size());
         }
-    };
+    }
+
+
+//    private HandlerThread mInputThread = new HandlerThread("Audio encode input thread");
+//    {
+//        mInputThread.start();
+//    }
+//    private Handler mInputHandler = new Handler(mInputThread.getLooper()) {
+//        @Override
+//        public void handleMessage(Message msg) {
+//            super.handleMessage(msg);
+//            MediaCodec mediaCodec = (MediaCodec)msg.obj;
+//            int i = msg.arg1;
+//            try {
+//                AudioGather.AudioBuf audioRawBuf = mAudioRawDataQueue.take();
+//                debug("Handle onInputBufferAvailable, buffer index = " + i);
+//                ByteBuffer buffer = mediaCodec.getInputBuffer(i);
+//                buffer.put(audioRawBuf.getData());
+//                audioRawBuf.decreaseRef();
+//                long pts = System.currentTimeMillis() * 1000 - mStartTime;
+//                if (!mEncoding) {
+//                    Log.d(TAG, "Send Audio Encoder with flag BUFFER_FLAG_END_OF_STREAM");
+//                    mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+//                    mAudioRawDataQueue.clear();
+//                } else {
+//                    mediaCodec.queueInputBuffer(i, 0, audioRawBuf.getData().length, pts, 0);//TODO check the flag
+//                }
+//            } catch (InterruptedException e) {
+//                LogTool.w(TAG, "Take Audio raw data from queue with exception. ", e);
+//            }
+//        }
+//    };
+
+    private void unregisterAudioRawDataListener(){
+        mAudioGather.unregisterAudioRawDataListener(this);
+    }
 
     private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
         @Override
@@ -95,19 +146,19 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
             Message msg = new Message();
             msg.obj = mediaCodec;
             msg.arg1 = i;
-            mInputHandler.sendMessage(msg);
+//            mInputHandler.sendMessage(msg);
+            mInputIndexQueue.offer(msg);
         }
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec mediaCodec, int i, @NonNull MediaCodec.BufferInfo bufferInfo) {
             debug("onOutputBufferAvailable, buffer index = " + i);
+            if( !audioEncoderLoop)
+                return;
             ByteBuffer buffer = mediaCodec.getOutputBuffer(i);
             if (mAudioEncoderListeners.size() > 0) {
-                EncoderBuffer buf = mEncodeBufPool.getBuf(bufferInfo.size);
-                buf.put(buffer);
-                buf.getByteBuffer().position(0);
-                buf.setBufferInfo(bufferInfo);
-                buf.setTrack(AvMediaMuxer.TRACK_AUDIO);
+                EncoderBuffer buf = mEncodeBufPool.getBuf(buffer.remaining());
+                buf.put(buffer, bufferInfo);
                 for (AudioEncoderListener listener : mAudioEncoderListeners) {
                     listener.onAudioEncoded(buf);
                 }
@@ -189,19 +240,27 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
         mAudioGather.registerAudioRawDataListener(this);
         mEncoder.start();
         mStartTime = System.currentTimeMillis() * 1000;
+        mInputThread = new InputThread();
+        audioEncoderLoop = true;
+        mInputThread.start();
     }
 
     public void stop() {
         LogTool.d(TAG, "stop");
-        mAudioGather.unregisterAudioRawDataListener(this);
+//        mAudioGather.unregisterAudioRawDataListener(this);
+//        if (mEncoder != null){
+//            mEncoder.reset();
+//        }
         mEncoding = false;
+        mInputIndexQueue.clear();
+        audioEncoderLoop = false;
     }
 
     public boolean isRunning() {
         return mEncoding;
     }
 
-    private ArrayList<AudioEncoderListener> mAudioEncoderListeners = new ArrayList<>();
+    private CopyOnWriteArrayList<AudioEncoderListener> mAudioEncoderListeners = new CopyOnWriteArrayList<>();
     public void registerEncoderListener(AudioEncoderListener listener) {
         if (!mAudioEncoderListeners.contains(listener)) {
             mAudioEncoderListeners.add(listener);

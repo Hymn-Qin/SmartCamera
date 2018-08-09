@@ -18,6 +18,7 @@ import com.zzdc.abb.smartcamera.util.NV21Convertor;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class VideoEncoder implements VideoGather.VideoRawDataListener {
@@ -36,8 +37,16 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     private long mStartTimeUs;
     private MediaFormat videoFormat;
     private byte[] mYuv420;
+    private Thread mInputThread;
+    public volatile boolean videoEncoderLoop = false;
+    public byte[] mPPS;
+
+    public static ByteBuffer PPS_BUFFER;
+    public static MediaCodec.BufferInfo PPS_BUFFER_INFO = new MediaCodec.BufferInfo();
 
     private LinkedBlockingQueue<VideoGather.VideoRawBuf> mViewRawDataQueue = new LinkedBlockingQueue<>();
+    private LinkedBlockingQueue<Message> mInputIndexQueue = new LinkedBlockingQueue<>();
+    //TODO remove
     private BufferPool<EncoderBuffer> mVideoEncodeBufPool = new BufferPool<>(EncoderBuffer.class, 3);
 
     private VideoEncoder() {}
@@ -52,7 +61,6 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     {
         mEncodeThread.start();
     }
-
     private Handler mEncodeHandler = new Handler( mEncodeThread.getLooper() ){
         @Override
         public void handleMessage(Message msg) {
@@ -71,39 +79,84 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         }
     };
 
-    private HandlerThread mInputThread = new HandlerThread("Video encode input thread");
-    {
-        mInputThread.start();
-    }
-    private Handler mInputHandler = new Handler(mInputThread.getLooper()){
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            MediaCodec mediaCodec = (MediaCodec)msg.obj;
-            int i = msg.arg1;
-            try {
-                VideoGather.VideoRawBuf buf = mViewRawDataQueue.take();
-                debug("Handle onInputBufferAvailable, buffer index = " + i);
-                if (selectColorFormat(VIDEO_MIME_TYPE) == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
-                    NV21Convertor.Nv21ToYuv420SP(buf.getData(), mYuv420, mWidth, mHeight);
-                }
-                buf.decreaseRef();
+    class InputThread extends Thread {
 
-                ByteBuffer inputBuffer = mediaCodec.getInputBuffer(i);
-                inputBuffer.put(mYuv420);
-                long pts = System.currentTimeMillis() * 1000 - mStartTimeUs;
-                if (!mEncoding) {
-                    Log.d(TAG, "Send Video Encoder with flag BUFFER_FLAG_END_OF_STREAM");
-                    mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                } else {
-                    //TODO Check flag
-                    mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, 0);
+
+        public void run() {
+            while (videoEncoderLoop && !Thread.interrupted()) {
+                try {
+                    int inputBufferIndex = mInputIndexQueue.take().arg1;
+                    if (inputBufferIndex >= 0) {
+                        VideoGather.VideoRawBuf buf = mViewRawDataQueue.take();
+                        debug("Handle onInputBufferAvailable, buffer index = " + inputBufferIndex);
+                        if (selectColorFormat(VIDEO_MIME_TYPE) == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
+                            NV21Convertor.Nv21ToYuv420SP(buf.getData(), mYuv420, mWidth, mHeight);
+                        }
+                        buf.decreaseRef();
+
+                        ByteBuffer inputBuffer = mEncoder.getInputBuffer(inputBufferIndex);
+                        inputBuffer.put(mYuv420);
+                        long pts = System.currentTimeMillis() * 1000 - mStartTimeUs;
+                        if (!mEncoding) {
+                            Log.d(TAG, "Send Video Encoder with flag BUFFER_FLAG_END_OF_STREAM");
+                            mEncoder.queueInputBuffer(inputBufferIndex, 0, mYuv420.length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        } else {
+                            //TODO Check flag
+                            mEncoder.queueInputBuffer(inputBufferIndex, 0, mYuv420.length, pts, 0);
+                        }
+                    }
+                } catch(InterruptedException e){
+                    LogTool.w(TAG, "Take Video raw data from queue with exception. ", e);
                 }
-            } catch (InterruptedException e) {
-                LogTool.w(TAG, "Take Video raw data from queue with exception. ", e);
             }
+            unregisterVideoRawDataListener();
+            if(mEncoder!=null){
+                mEncoder.reset();
+            }
+            mInputIndexQueue.clear();
+            mViewRawDataQueue.clear();
+            LogTool.w(TAG, "Encoder input thread stop. InputIndex_Que size ="+mInputIndexQueue.size());
         }
-    };
+    }
+
+
+//    private HandlerThread mInputThread = new HandlerThread("Video encode input thread");
+//    {
+//        mInputThread.start();
+//    }
+//    private Handler mInputHandler = new Handler(mInputThread.getLooper()){
+//        @Override
+//        public void handleMessage(Message msg) {
+//            super.handleMessage(msg);
+//            MediaCodec mediaCodec = (MediaCodec)msg.obj;
+//            int i = msg.arg1;
+//            try {
+//                VideoGather.VideoRawBuf buf = mViewRawDataQueue.take();
+//                debug("Handle onInputBufferAvailable, buffer index = " + i);
+//                Log.d("keming","Handle onInputBufferAvailable, buffer index = " + i);
+//                if (selectColorFormat(VIDEO_MIME_TYPE) == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
+//                    NV21Convertor.Nv21ToYuv420SP(buf.getData(), mYuv420, mWidth, mHeight);
+//                }
+//                buf.decreaseRef();
+//
+//                ByteBuffer inputBuffer = mediaCodec.getInputBuffer(i);
+//                inputBuffer.put(mYuv420);
+//                long pts = System.currentTimeMillis() * 1000 - mStartTimeUs;
+//                if (!mEncoding) {
+//                    Log.d(TAG, "Send Video Encoder with flag BUFFER_FLAG_END_OF_STREAM");
+//                    mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+//                } else {
+//                    //TODO Check flag
+//                    mediaCodec.queueInputBuffer(i, 0, mYuv420.length, pts, 0);
+//                }
+//            } catch (InterruptedException e) {
+//                LogTool.w(TAG, "Take Video raw data from queue with exception. ", e);
+//            }
+//        }
+//    };
+    private void unregisterVideoRawDataListener(){
+        mVideoGather.unregisterVideoRawDataListener(this);
+    }
 
     private MediaCodec.Callback mEncodeCallback = new MediaCodec.Callback() {
         @Override
@@ -112,28 +165,32 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
             Message msg = new Message();
             msg.obj = mediaCodec;
             msg.arg1 = i;
-            mInputHandler.sendMessage(msg);
+//            mInputHandler.sendMessage(msg);
+            mInputIndexQueue.offer(msg);
         }
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec mediaCodec, int i, @NonNull MediaCodec.BufferInfo bufferInfo) {
             debug("onOutputBufferAvailable start. buffer index = " + i);
+            if( !videoEncoderLoop)
+                return;
+
             if (bufferInfo.size != 0) {
                 ByteBuffer buffer = mediaCodec.getOutputBuffer(i);
-
-                ByteBuffer tmpBuffer = buffer;
-                int type = tmpBuffer.get(4) & 0x1F;
+                int type = buffer.get(4) & 0x1F;
                 if (type == 7 || type == 8) {
-                    byte[] tmpPPS = new byte[bufferInfo.size];
-                    tmpBuffer.get(tmpPPS, bufferInfo.offset, bufferInfo.size);
-                    Constant.PPS = tmpPPS;
+                    mPPS = new byte[bufferInfo.size];
+                    buffer.get(mPPS);
+                    Constant.PPS = mPPS;
+
+                    PPS_BUFFER = ByteBuffer.wrap(mPPS);
+                    PPS_BUFFER_INFO.set(0, bufferInfo.size, bufferInfo.presentationTimeUs, bufferInfo.flags);
+                    buffer.position(bufferInfo.offset);
                     LogTool.d(TAG, "Find PPS size = " + bufferInfo.size);
                 }
-                EncoderBuffer buf = mVideoEncodeBufPool.getBuf(bufferInfo.size);
-                buf.put(buffer);
-                buf.getByteBuffer().position(0);
-                buf.setBufferInfo(bufferInfo);
-                buf.setTrack(AvMediaMuxer.TRACK_VIDEO);
+
+                EncoderBuffer buf = mVideoEncodeBufPool.getBuf(buffer.remaining());
+                buf.put(buffer, bufferInfo);
                 debug("VideoEncoderListener.size = " + mVideoEncoderListeners.size());
                 if (mVideoEncoderListeners.size() > 0) {
                     for (VideoEncoderListener listener : mVideoEncoderListeners) {
@@ -204,6 +261,7 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
             LogTool.e(TAG, "start mEncoder is null");
             throw new RuntimeException("Encoder cann't start.");
         }
+
         mEncoder.reset();
         mEncoder.setCallback(mEncodeCallback);
         mEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -211,10 +269,15 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         mVideoGather.registerVideoRawDataListener(this);
         mEncoding = true;
         mStartTimeUs = System.currentTimeMillis() * 1000;
+        mInputThread = new InputThread();
+        videoEncoderLoop = true;
+        mInputThread.start();
+        LogTool.w(TAG,"VideoEncoder start");
     }
 
     public void stop() {
-        mVideoGather.unregisterVideoRawDataListener(this);
+        videoEncoderLoop = false;
+        mInputIndexQueue.clear();
         mEncoding = false;
     }
 
@@ -222,7 +285,7 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         return mEncoding;
     }
 
-    private ArrayList<VideoEncoderListener> mVideoEncoderListeners = new ArrayList<>();
+    private CopyOnWriteArrayList<VideoEncoderListener> mVideoEncoderListeners = new CopyOnWriteArrayList<>();
     public void registerEncoderListener(VideoEncoderListener listener) {
         if (!mVideoEncoderListeners.contains(listener)) {
             mVideoEncoderListeners.add(listener);

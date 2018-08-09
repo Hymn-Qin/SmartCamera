@@ -1,52 +1,45 @@
 package com.zzdc.abb.smartcamera.TutkBussiness;
 
-import android.text.TextUtils;
 import android.util.Log;
-
 import com.tutk.IOTC.AVAPIs;
 import com.tutk.IOTC.IOTCAPIs;
 import com.tutk.IOTC.St_SInfo;
-import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.controller.AvMediaTransfer;
 import com.zzdc.abb.smartcamera.controller.MainActivity;
 import com.zzdc.abb.smartcamera.info.FrameInfo;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
 import com.zzdc.abb.smartcamera.util.LogTool;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class TutkSession implements AvMediaTransfer.AvTransferLister{
+public class TutkSession implements AvMediaTransfer.AvTransferLister {
     private static final String TAG = TutkSession.class.getSimpleName();
     private static final boolean DEBUG = true;
 
     private int mSessionID;
     private int mChannelID;
     private int mAudioRecChannelID;
+    private static final int MEDIA_IOTC_CHANNEL_ID = 0;
+    private static final int VOICE_IOTC_CHANNEL_ID = 1;
 
-    private String gAcc = "admin";
-    private String gPwd = "888888";
-    protected CommApis main;
+    private static final String gAcc = "admin";
+    private static final String gPwd = "888888";
 
     private static final int MAX_BUF_SIZE = 1024;
     private static final int SERVTYPE_STREAM_SERVER = 16;
-    private TutkSession tutkSession; //TODO ??  need  check
+    private static final int AV_SERVER_RESEND_SIZE = 1024 * 4;
 
     private TutkCmdManager tutkCmdManger;
     private WriteThread mWriteThread;
     private Thread mReceiveAudioDataThread;
     private boolean ReceiveAudioRuning = false;
 
-    private ArrayList<RemoteAudioDataMonitor> mRemoteAudioDataMonitors = new ArrayList<>();
+    private CopyOnWriteArrayList<RemoteAudioDataMonitor> mRemoteAudioDataMonitors = new CopyOnWriteArrayList<>();
     private int mState;
 
-    public static final int SESSION_STATE_PREPARE = 1;
-    public static final int SESSION_STATE_EXECUTING = 2;
-    public static final int SESSION_STATE_IDLE = 3;
-    private int mfailCount = 0;
+    private static final int SESSION_STATE_PREPARE = 1;
+    private static final int SESSION_STATE_EXECUTING = 2;
+    public static final int SESSION_STATE_IDLE = 3; //TODO should be private
 
     public int getState() {
         return mState;
@@ -56,124 +49,120 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
         this.mState = mState;
     }
 
-    public int getSessionID() {
-        return mSessionID;
-    }
+    private TutkSessionThread mTutkSessionThread;
 
     public TutkSession(int sessionId) {
         super();
         mSessionID = sessionId;
-        //TODO check encoderlistener counts
-        tutkSession = this;
-//        avMediaTransfer.registerAvTransferListener(this);
         setState(SESSION_STATE_PREPARE);
-        TutkSessionThread tutkSessionThread = new TutkSessionThread(mSessionID);
-        tutkSessionThread.start();
-        tutkCmdManger  = new TutkCmdManager(this);
-
+        mTutkSessionThread = new TutkSessionThread("TUTK session thread sid = " + mSessionID);
+        mTutkSessionThread.start();
+        tutkCmdManger = new TutkCmdManager(this);
     }
 
     private class TutkSessionThread extends Thread {
-
-        int mSID;
-
-        public TutkSessionThread(int aSid) {
-            mSID = aSid;
+        private TutkSessionThread(String name) {
+            super(name);
         }
-
         public void run() {
-
             super.run();
-            int tmpResult = 0;
             try {
-                LogTool.d(TAG, "ListenThread start");
-                LogTool.d(TAG, "SID = " + mSID);
+                LogTool.d(TAG, this.getName() + ", start");
 
-                int tmpAVIndex = 0;
                 int[] bResend = new int[1];
-                int[] srvType = new int[1];
-                tmpAVIndex = AVAPIs.avServStart3(mSID, gAcc, gPwd, 2, SERVTYPE_STREAM_SERVER, 0, bResend);
-//                LogTool.d(TAG, "avServStart3(), tmpAVIndex=" + tmpAVIndex + " sid = " + mSID + " bResend=" + bResend[0]);
-                //用于接收client 发送的音频
-                int avIndex = AVAPIs.avClientStart(mSID, "admin", "888888", 2, srvType, 1);
-                LogTool.d(TAG, "avClientStart(), avIndex=" + avIndex + " sid = " + mSID + " bResend=" + bResend[0]);
-                if (tmpAVIndex < 0) {
-                    LogTool.d(TAG, "FAIL ... ");
-                    IOTCAPIs.IOTC_Session_Close(mSID);
+
+                mChannelID = AVAPIs.avServStart3(mSessionID, gAcc, gPwd, 2, SERVTYPE_STREAM_SERVER, MEDIA_IOTC_CHANNEL_ID, bResend);
+                if (mChannelID >= 0) {
+                    LogTool.d(TAG, "sid(" + mSessionID + ") Start avServer succeed, channel id = " + mChannelID + " resend = " + bResend[0]);
+                } else {
+                    IOTCAPIs.IOTC_Session_Close(mSessionID);
+                    LogTool.w(TAG, "sid(" + mSessionID + ") Start avServer failed., Error code = " + mChannelID);
                 }
-                AVAPIs.avServSetResendSize(tmpAVIndex, 4096);
+
+                int[] srvType = new int[1];
+                mAudioRecChannelID = AVAPIs.avClientStart(mSessionID, gAcc, gPwd, 2, srvType, VOICE_IOTC_CHANNEL_ID);
+                if (mAudioRecChannelID >= 0) {
+                    LogTool.d(TAG, "sid(" + mSessionID + ") Start avClientStart succeed, channel id = " + mAudioRecChannelID + ", sver type = " + srvType[0]);
+                } else {
+                    LogTool.w(TAG, "sid(" + mSessionID + ") Start avClientStart failed., Error code = " + mAudioRecChannelID);
+                }
+
+                AVAPIs.avServSetResendSize(mChannelID, AV_SERVER_RESEND_SIZE);
                 St_SInfo info = new St_SInfo();
                 String[] mode = {"P2P mode", "Relay mode", "Lan mode"};
 
-                tmpResult = IOTCAPIs.IOTC_Session_Check(mSID, info);
+                int tmpResult = IOTCAPIs.IOTC_Session_Check(mSessionID, info);
                 if (tmpResult == IOTCAPIs.IOTC_ER_NoERROR) {
-                    LogTool.d(TAG, "   -> IP:Port= " + main.ByteToString(info.RemoteIP) + ":" + info.RemotePort);
+                    LogTool.d(TAG, "IP:Port= " + CommApis.ByteToString(info.RemoteIP) + ":" + info.RemotePort);
                     if (info.Mode >= 0 && info.Mode <= 2) {
-                        LogTool.d(TAG, "   -> Mode=[" + mode[info.Mode] + "]");
+                        LogTool.d(TAG, "    -> Mode=[" + mode[info.Mode] + "]");
                     }
-                    LogTool.d(TAG, "   -> NatType=[" + info.NatType + "]");
-                    LogTool.d(TAG, "   -> Version=[" + info.IOTCVersion + "]");
+                    LogTool.d(TAG, "    -> NatType=[" + info.NatType + "], Version=[" + info.IOTCVersion + "]");
+                } else {
+                    LogTool.e(TAG, "IOTC check session info failed. result = " + tmpResult);
                 }
-                mChannelID = tmpAVIndex;
-                mAudioRecChannelID = avIndex;
 
-                mWriteThread = new WriteThread("TUTK write thread sid=" + mSessionID);
+                mWriteThread = new WriteThread("TUTK session write thread sid = " + mSessionID);
                 mWriteThread.start();
 
                 byte[] ioCtrlBuf = new byte[MAX_BUF_SIZE];
                 int[] ioType = new int[1];
                 while (mState != SESSION_STATE_IDLE) {
-                    tmpResult = AVAPIs.avRecvIOCtrl(tmpAVIndex, ioType, ioCtrlBuf, MAX_BUF_SIZE, 1000);
+                    tmpResult = AVAPIs.avRecvIOCtrl(mChannelID, ioType, ioCtrlBuf, MAX_BUF_SIZE, 1000);
                     if (tmpResult >= 0) {
-                        LogTool.d(TAG, "avRecvIOCtrl(), ioCtrlBuf_length= " + tmpResult);
+                        debug("avRecvIOCtrl(), length = " + tmpResult);
                         byte[] jsonCmdBuf = new byte[tmpResult];
-                        System.arraycopy(ioCtrlBuf,0,jsonCmdBuf,0,tmpResult);
+                        System.arraycopy(ioCtrlBuf, 0, jsonCmdBuf, 0, tmpResult);
                         setState(SESSION_STATE_EXECUTING);
-                        tutkCmdManger.HandleIOCTRLCmd(mSessionID,mChannelID,jsonCmdBuf,ioType[0]);
-                    }else if (tmpResult != AVAPIs.AV_ER_TIMEOUT) {
-                        LogTool.d(TAG, "avRecvIOCtrl(), rc= " + tmpResult);
+                        try{
+                            tutkCmdManger.HandleIOCTRLCmd(mSessionID, mChannelID, jsonCmdBuf, ioType[0]);
+                        }catch (Exception e){
+                            e.printStackTrace();
+                            Log.e(TAG,"HandleIOCTRLCmd e="+e.getMessage());
+                        }
+                    } else if (tmpResult != AVAPIs.AV_ER_TIMEOUT) {
+                        LogTool.w(TAG, "avRecvIOCtrl(), Erro code = " + tmpResult);
                         tutkCmdManger.closeIOCTRL();
                         break;
                     }
                 }
-//                avMediaTransfer.unRegisterAvTransferListener(tutkSession);
-                AVAPIs.avServStop(tmpAVIndex);
+                AVAPIs.avServStop(mChannelID);
+                AVAPIs.avClientStop(mAudioRecChannelID);
                 setState(SESSION_STATE_IDLE);
-                LogTool.d(TAG, "SID = " + mSID + " avIndex = " + tmpAVIndex + " listen_ForAVServerStart Exit !!");
+                LogTool.d(TAG, getName() + "stop");
             } catch (Exception e) {
-                LogTool.d(TAG, "ListenThread EXCEPTION " + e.toString());
+                e.printStackTrace();
+                LogTool.w(TAG, getName(), e);
             }
         }
     }
 
-    public void registRemoteAudioDataMonitor(RemoteAudioDataMonitor aMonitor){
-        if(aMonitor!=null && !mRemoteAudioDataMonitors.contains(aMonitor)){
+    public void registRemoteAudioDataMonitor(RemoteAudioDataMonitor aMonitor) {
+        if (aMonitor != null && !mRemoteAudioDataMonitors.contains(aMonitor)) {
             mRemoteAudioDataMonitors.add(aMonitor);
         }
-
     }
 
-    public void unregistRemoteAudioDataMonitor(RemoteAudioDataMonitor aMonitor){
+    public void unregistRemoteAudioDataMonitor(RemoteAudioDataMonitor aMonitor) {
         mRemoteAudioDataMonitors.remove(aMonitor);
     }
 
-    public void prepareForReceiveAudioData(){
-        mReceiveAudioDataThread = new RemoteAudioReceiveThread();
+    public void prepareForReceiveAudioData() {
+        mReceiveAudioDataThread = new RemoteAudioReceiveThread("TUTK session receive voice thread");
         ReceiveAudioRuning = true;
         mReceiveAudioDataThread.start();
     }
 
-    public void releaseRemoteCallRes(){
+    public void releaseRemoteCallRes() {
         ReceiveAudioRuning = false;
-        if(mReceiveAudioDataThread != null){
+        if (mReceiveAudioDataThread != null) {
             mReceiveAudioDataThread.interrupt();
             mReceiveAudioDataThread = null;
         }
     }
 
-
-    public void writeMessge(String res){
-        if (mWriteThread != null){
+    public void writeMessge(String res) {
+        if (mWriteThread != null) {
             mWriteThread.write(res);
         }
     }
@@ -184,18 +173,17 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
         private WriteThread(String name) {
             super(name);
         }
-
         @Override
         public void run() {
-            LogTool.d(TAG, "TUTK write thread start, sid=" + mSessionID);
+            LogTool.d(TAG, getName() + ", start");
             while (mState != SESSION_STATE_IDLE && !interrupted()) {
                 try {
                     String responseStr = mWriteList.take();
-                    byte[] message = (byte[]) responseStr.getBytes();
-                    int result =  AVAPIs.avSendIOCtrl(mChannelID, -1, message, message.length);
-                    LogTool.d(TAG,"Send IOCtrl, sid=" + mSessionID +", result: " + result + ", message: " + responseStr);
+                    byte[] message = responseStr.getBytes();
+                    int result = AVAPIs.avSendIOCtrl(mChannelID, -1, message, message.length);
+                    LogTool.d(TAG, "Send IOCtrl, sid=" + mSessionID + ", result: " + result + ", message: " + responseStr);
                 } catch (InterruptedException e) {
-                    LogTool.w(TAG, "TUTK write thread exception, sid=" + mSessionID, e);
+                    LogTool.w(TAG, getName() + ", exception ", e);
                 }
             }
         }
@@ -208,170 +196,146 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister{
         }
     }
 
-
     @Override
     public void sendVideoTutkFrame(TutkFrame tutkFrame) {
-        if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
-            LogTool.w(TAG, "Video data not ready");
+        if (mState == SESSION_STATE_IDLE) {
+            LogTool.w(TAG, "Send video frame failed, session closed");
             return;
         }
-
+        if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
+            LogTool.w(TAG, "Send video frame failed, data not ready");
+            return;
+        }
         FrameInfo frameInfo = tutkFrame.getFrameInfo();
         byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags, frameInfo.timestamp);
         int rst = AVAPIs.avSendFrameData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
-        debug("Send video data, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
-        if (rst == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
-            LogTool.w(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
-        } else if (rst == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
-            LogTool.w(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
-        } else if (rst == IOTCAPIs.IOTC_ER_INVALID_SID) {
-            LogTool.w(TAG,"IOTC_ER_INVALID_SID");
-        } else if (rst < 0) {
-            mfailCount = mfailCount + 1;
-        }
-
-        if (rst == AVAPIs.AV_ER_NoERROR){
-            mfailCount = 0;
-        }
-
-        if(mfailCount >= 800 ){
-            LogTool.e(TAG,"Send video data fail 800");
-            setState(SESSION_STATE_IDLE);
+        if (rst == AVAPIs.AV_ER_NoERROR) {
+            debug("Send video data succeed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+        } else {
+            LogTool.w(TAG, "Send video data failed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+            switch (rst) {
+                case AVAPIs.AV_ER_INVALID_ARG:
+                case AVAPIs.AV_ER_CLIENT_NOT_SUPPORT:
+                    break;
+                case AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE:
+                case AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT:
+                case AVAPIs.AV_ER_INVALID_SID:
+                    mState = SESSION_STATE_IDLE;
+                    break;
+                case AVAPIs.AV_ER_CLIENT_NO_AVLOGIN:
+                case AVAPIs.AV_ER_EXCEED_MAX_SIZE:
+                case AVAPIs.AV_ER_MEM_INSUFF:
+                case AVAPIs.AV_ER_NO_PERMISSION:
+                    break;
+            }
         }
     }
 
     @Override
     public void sendAudioTutkFrame(TutkFrame tutkFrame) {
-        if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
-            LogTool.w(TAG, "Audio data not ready");
+        if (mState == SESSION_STATE_IDLE) {
+            LogTool.w(TAG, "Send audio frame failed, session closed");
             return;
         }
-
+        if (tutkFrame == null || tutkFrame.getData() == null || tutkFrame.getFrameInfo() == null) {
+            LogTool.w(TAG, "Send audio frame failed, data not ready");
+            return;
+        }
         FrameInfo frameInfo = tutkFrame.getFrameInfo();
-        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags,frameInfo.timestamp);
+        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags, frameInfo.timestamp);
         int rst = AVAPIs.avSendAudioData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
-        debug("Send audio data, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
-        if (rst == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
-            LogTool.w(TAG,"AV_ER_REMOTE_TIMEOUT_DISCONNECT");
-            setState(SESSION_STATE_IDLE);
-        } else if (rst == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
-            LogTool.w(TAG,"AV_ER_SESSION_CLOSE_BY_REMOTE");
-            setState(SESSION_STATE_IDLE);
-        } else if (rst == IOTCAPIs.IOTC_ER_INVALID_SID) {
-            LogTool.w(TAG,"IOTC_ER_INVALID_SID");
-            setState(SESSION_STATE_IDLE);
-        } else if (rst < 0) {
-            LogTool.w(TAG,"IOTC_ER_xxx");
+        if (rst == AVAPIs.AV_ER_NoERROR) {
+            debug("Send audio data succeed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+        } else {
+            LogTool.w(TAG, "Send audio data failed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
+            switch (rst) {
+                case AVAPIs.AV_ER_INVALID_ARG:
+                case AVAPIs.AV_ER_CLIENT_NOT_SUPPORT:
+                    break;
+                case AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE:
+                case AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT:
+                case AVAPIs.AV_ER_INVALID_SID:
+                    mState = SESSION_STATE_IDLE;
+                    break;
+                case AVAPIs.AV_ER_CLIENT_NO_AVLOGIN:
+                case AVAPIs.AV_ER_MEM_INSUFF:
+                case AVAPIs.AV_ER_EXCEED_MAX_SIZE:
+                case AVAPIs.AV_ER_NO_PERMISSION:
+                    break;
+            }
         }
     }
 
-    public class RemoteAudioReceiveThread extends Thread{
-
+    public class RemoteAudioReceiveThread extends Thread {
         private static final int AUDIO_BUF_SIZE = 1024;
         private static final int FRAME_INFO_SIZE = 16;
 
-        public RemoteAudioReceiveThread(){}
+        private RemoteAudioReceiveThread(String name) {
+            super(name);
+        }
 
         @Override
         public void run() {
-            Log.d(TAG,Thread.currentThread().getName() + " start");
-            AVAPIs av = new AVAPIs();
+            Log.d(TAG, getName() + " start");
             byte[] frameInfo = new byte[FRAME_INFO_SIZE];
             byte[] audioBuffer = new byte[AUDIO_BUF_SIZE];
-            while (ReceiveAudioRuning) {
-
+            while (ReceiveAudioRuning && !interrupted()) {
                 int tmpRet = AVAPIs.avCheckAudioBuf(mAudioRecChannelID);
+                LogTool.d(TAG, "Receive voice fram count = " + tmpRet);
                 System.out.println("tmpRet = " + tmpRet);
 
-                if(tmpRet < 0){
-                    System.out.printf("[%s] avCheckAudioBuf() failed: %d\n",
-                            Thread.currentThread().getName(), tmpRet);
-                    break;
-                }else if(tmpRet < 3){
+                if (tmpRet < 3) {
                     try {
-                        Thread.sleep(40);
+                        sleep(50);
                         continue;
-                    }
-                    catch (InterruptedException e) {
-                        System.out.println(e.getMessage());
+                    } catch (InterruptedException e) {
+                        LogTool.w(TAG, "", e);
                         break;
                     }
-
                 }
-
 
                 int[] frameNumber = new int[1];
-                int ret =  AVAPIs.avRecvAudioData(mAudioRecChannelID, audioBuffer,
-                        AUDIO_BUF_SIZE, frameInfo, FRAME_INFO_SIZE,
-                        frameNumber);
-
-              //  System.out.println("avRecvAudioData ret " + ret + " AUDIO_BUF_SIZE = " + AUDIO_BUF_SIZE  +" frameNumber = " +frameNumber[0]);
-                if (ret == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
-                    System.out.printf("[%s] AV_ER_SESSION_CLOSE_BY_REMOTE\n",
-                            Thread.currentThread().getName());
-                    break;
-                }
-                else if (ret == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
-                    System.out.printf("[%s] AV_ER_REMOTE_TIMEOUT_DISCONNECT\n",
-                            Thread.currentThread().getName());
-                    break;
-                }
-                else if (ret == AVAPIs.AV_ER_INVALID_SID) {
-                    System.out.printf("[%s] Session cant be used anymore\n",
-                            Thread.currentThread().getName());
-                    break;
-                }
-                else if (ret == AVAPIs.AV_ER_LOSED_THIS_FRAME) {
-                    //System.out.printf("[%s] Audio frame losed\n",
-                    //        Thread.currentThread().getName());
-                    continue;
-                }
-
-                // Now the data is ready in audioBuffer[0 ... ret - 1]
-                // Do something here
-                if (ret > 0){
-                    System.out.println("avRecvAudioData ret " + ret + " audioBuffer " + audioBuffer + " AUDIO_BUF_SIZE = " + AUDIO_BUF_SIZE  + "frameInfo "+ frameInfo+" frameNumber = " +frameNumber[0]);
-                    for (RemoteAudioDataMonitor aMonitor : mRemoteAudioDataMonitors){
+                int ret = AVAPIs.avRecvAudioData(mAudioRecChannelID, audioBuffer, AUDIO_BUF_SIZE, frameInfo, FRAME_INFO_SIZE, frameNumber);
+                if (ret > 0) {
+                    debug("Receive remote voice, ret = " + ret + ", frameNumber = " + frameNumber[0]);
+                    for (RemoteAudioDataMonitor aMonitor : mRemoteAudioDataMonitors) {
                         aMonitor.onAudioDataReceive(audioBuffer, ret);
                     }
-
+                } else if (ret == AVAPIs.AV_ER_LOSED_THIS_FRAME) {
+                    LogTool.w(TAG, getName() + "Receive remote voice losed frame");
+                } else {
+                    LogTool.w(TAG, getName() + "Receive remote voice failed, Error code = " + ret);
+                    break;
                 }
-
-
             }
-
-//            System.out.printf("[%s] Exit\n",
-//                    Thread.currentThread().getName());
         }
     }
 
-    public interface RemoteAudioDataMonitor{
-        public void onAudioDataReceive(byte[] data, int size);
+    public interface RemoteAudioDataMonitor {
+        void onAudioDataReceive(byte[] data, int size);
     }
 
-
-    public void destorySession(){
-
-        Log.d(TAG,"destorySession sid = " + mSessionID);
-        if(tutkCmdManger != null){
+    public void destorySession() {
+        Log.d(TAG, "Destroy session sid = " + mSessionID);
+        if (tutkCmdManger != null) {
             tutkCmdManger.closeIOCTRL();
         }
-
-        if (mReceiveAudioDataThread != null && !mReceiveAudioDataThread.isInterrupted()){
-            mReceiveAudioDataThread.interrupt();
-            mReceiveAudioDataThread = null;
-        }
-
-        if(mWriteThread != null && !mWriteThread.isInterrupted()){
+        releaseRemoteCallRes();
+        if (mWriteThread != null) {
             mWriteThread.interrupt();
             mWriteThread = null;
         }
+        if (mTutkSessionThread != null) {
+            mTutkSessionThread.interrupt();
+            mTutkSessionThread = null;
+        }
         //release server mode
         AVAPIs.avServStop(mChannelID);
-        AVAPIs.avServExit(mSessionID,0);
+        AVAPIs.avServExit(mSessionID, MEDIA_IOTC_CHANNEL_ID);
+
         //release client mode
         AVAPIs.avClientStop(mAudioRecChannelID);
-        AVAPIs.avClientExit(mSessionID,1);
+        AVAPIs.avClientExit(mSessionID, VOICE_IOTC_CHANNEL_ID);
 
         IOTCAPIs.IOTC_Session_Close(mSessionID);
         tutkCmdManger.uninit();

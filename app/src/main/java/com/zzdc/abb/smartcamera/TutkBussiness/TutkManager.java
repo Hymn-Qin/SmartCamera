@@ -67,24 +67,22 @@ public class TutkManager extends IOTCAPIs {
         for(TutkSession mSession : mSessions.values()) {
             LogTool.d(TAG,"Send call message: " + jsonStr);
             mSession.writeMessge(jsonStr);
-
         }
-
     }
 
     private void startSession() {
         m_bStoped = false;
-        //start login thread
+
         if (mLoginThread == null) {
             mLoginThread = new LoginThread();
             mLoginThread.start();
         }
-        //start Listen thread
+
         if (mMainThread == null) {
             mMainThread = new MainThread();
             mMainThread.start();
         }
-        //start RecyclyThread thread
+
         if(mRecycleThread == null){
             mRecycleThread = new RecycleThread();
             mRecycleThread.start();
@@ -114,7 +112,6 @@ public class TutkManager extends IOTCAPIs {
                     }
                 }
             }
-
         }
     }
 
@@ -181,7 +178,6 @@ public class TutkManager extends IOTCAPIs {
             }
             LogTool.d(TAG, "checkConnect: " + str);
         }
-
     }
 
     class LoginThread extends Thread {

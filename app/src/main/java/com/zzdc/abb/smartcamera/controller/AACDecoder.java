@@ -1,17 +1,12 @@
 package com.zzdc.abb.smartcamera.controller;
 
-import android.content.Context;
 import android.media.AudioFormat;
-import android.media.AudioManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
-import android.media.MediaRecorder;
 import android.util.Log;
 
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkSession;
-import com.zzdc.abb.smartcamera.util.ByteToHexTool;
-import com.zzdc.abb.smartcamera.util.WriteToFileTool;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -24,11 +19,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
+public class AACDecoder implements TutkSession.RemoteAudioDataMonitor {
     private static final String TAG = AACDecoder.class.getSimpleName();
-
     private MediaCodec mAudioDecorder;
-
     //声道数
     private static final int KEY_CHANNEL_COUNT = 1;
     //采样率
@@ -42,7 +35,7 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
     public AudioPlayer mAudioPlayer;
     private Thread mAudioDecodeThread;
     private String filePath = android.os.Environment
-            .getExternalStorageDirectory().getAbsolutePath() + File.separator +"test.aac";
+            .getExternalStorageDirectory().getAbsolutePath() + File.separator + "test.aac";
     private DataInputStream mInputStream;
 
     private long mFailcount = 0;
@@ -50,22 +43,20 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
     private boolean isTestLocalFile = false;
     private boolean isDataReady = false;
     private Thread mRenderThread;
-    public void SetAudioTrackTypeForCall(){
+
+    public void SetAudioTrackTypeForCall() {
         mAudioPlayer = new AudioPlayer(KEY_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT);
         mAudioPlayer.SetAudioTrackTypeForCall();
-
     }
-    public void  SetAudioTrackTypeForMonitor(){
+
+    public void SetAudioTrackTypeForMonitor() {
         mAudioPlayer.SetAudioTrackTypeForMonitor();
-
     }
 
-    public void init(){
-
+    public void init() {
         mAudioPlayer.prepare();
         try {
-
             //需要解码数据的类型
             String mine = "audio/mp4a-latm";
             //初始化解码器
@@ -83,13 +74,11 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
             mediaFormat.setByteBuffer("csd-0", csd_0);
             //解码器配置
             mAudioDecorder.configure(mediaFormat, null, null, 0);
-
-
         } catch (Exception e) {
             Log.d(TAG, "Exception " + e.toString());
             e.printStackTrace();
         }
-        if(isTestLocalFile){
+        if (isTestLocalFile) {
             prepare();
         }
         mAudioDecorder.start();
@@ -101,28 +90,23 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
         mRenderThread.start();
 
     }
-    public void deinit(){
+
+    public void deinit() {
         AudiotrackRuning = false;
         AudioDecodeRuning = false;
-       // stop();
-
+        // stop();
     }
-
-
 
     @Override
     public void onAudioDataReceive(byte[] data, int size) {
-
         byte[] copy = new byte[size];
-
-        try{
+        try {
             System.arraycopy(data, 0, copy, 0, size);
-            Log.d(TAG,"onAudioDataReceive " + copy.length);
+            Log.d(TAG, "onAudioDataReceive " + copy.length);
             mAudioQueue.put(copy);
-        }catch (Exception e){
-            Log.d(TAG,"queue.offer Exception " + e.toString());
+        } catch (Exception e) {
+            Log.d(TAG, "queue.offer Exception " + e.toString());
         }
-
     }
 
     class RenderThread implements Runnable {
@@ -143,104 +127,93 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
             doRender();
         }
 
-        private void doRender(){
-            while(AudiotrackRuning){
-                try{
+        private void doRender() {
+            while (AudiotrackRuning) {
+                try {
                     MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-                    int outputBufferIndex = mAudioDecorder.dequeueOutputBuffer(info,0);
+                    int outputBufferIndex = mAudioDecorder.dequeueOutputBuffer(info, 0);
 //                    Log.d(TAG,"outputBufferIndex = " + outputBufferIndex);
-                    if (outputBufferIndex > 0){
+                    if (outputBufferIndex > 0) {
                         if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
                             Log.i("TAG", "audio encoder: codec config buffer");
                             mAudioDecorder.releaseOutputBuffer(outputBufferIndex, false);
                             continue;
                         }
-
                         ByteBuffer outBuffer = mAudioDecorder.getOutputBuffer(outputBufferIndex);
                         byte[] outData = new byte[info.size];
                         outBuffer.get(outData);
                         outBuffer.clear();
-                        mAudioDecorder.releaseOutputBuffer(outputBufferIndex,false);
-                        mAudioPlayer.playAudioTrack(outData,0,info.size);
-                        Log.d(TAG,"mAudioPlayer playAudioTrack " +info.size);
+                        mAudioDecorder.releaseOutputBuffer(outputBufferIndex, false);
+                        mAudioPlayer.playAudioTrack(outData, 0, info.size);
+                        Log.d(TAG, "mAudioPlayer playAudioTrack " + info.size);
                     }
-                }catch (Exception e){
-                    Log.d(TAG,"Exception " + e.toString());
+                } catch (Exception e) {
+                    Log.d(TAG, "Exception " + e.toString());
                 }
-
             }
-            try{
-
-                if (mAudioPlayer != null){
+            try {
+                if (mAudioPlayer != null) {
                     mAudioPlayer.stop();
                     mAudioPlayer.release();
                     mAudioPlayer = null;
-                    Log.d(TAG,"mAudioPlayer stop");
+                    Log.d(TAG, "mAudioPlayer stop");
                 }
-
-            }catch (Exception e){
+            } catch (Exception e) {
                 Log.d(TAG, "stop EXCEPTION " + e.toString());
             }
         }
     }
 
     class AudioDecodeThread implements Runnable {
-
         @Override
         public void run() {
-            while(AudioDecodeRuning){
+            while (AudioDecodeRuning) {
                 decode();
             }
-            try{
-                if (mAudioDecorder != null){
+            try {
+                if (mAudioDecorder != null) {
                     mAudioDecorder.stop();
                     mAudioDecorder = null;
-                    Log.d(TAG,"mAudioDecorder stop");
+                    Log.d(TAG, "mAudioDecorder stop");
                 }
-            }catch (Exception e){
+            } catch (Exception e) {
                 Log.d(TAG, "Decoder stop EXCEPTION " + e.toString());
             }
-
         }
 
-        private void decode(){
-
-
+        private void decode() {
             long timeoutUs = 10000;
             byte[] streamBuffer = null;
-
             //本地文件
-            if (isTestLocalFile){
-
+            if (isTestLocalFile) {
                 try {
                     streamBuffer = getBytes(mInputStream);
                 } catch (Exception e) {
-                    Log.d(TAG,"getBytes Exception " + e.toString());
+                    Log.d(TAG, "getBytes Exception " + e.toString());
                     e.printStackTrace();
                 }
             }
             int bytes_cnt = 0;
             while (AudioDecodeRuning) {
-
-                if (!isTestLocalFile){
-                    if (mAudioQueue.size()<=0) {
+                if (!isTestLocalFile) {
+                    if (mAudioQueue.size() <= 0) {
                         try {
                             Thread.sleep(10);
                         } catch (Exception e) {
-                            Log.d(TAG,"getBytes Exception " + e.toString());
+                            Log.d(TAG, "getBytes Exception " + e.toString());
                             e.printStackTrace();
                         }
                         continue;
                     }
-                    Log.d(TAG,"get data from web");
+                    Log.d(TAG, "get data from web");
                     streamBuffer = mAudioQueue.poll();
                 }
-                Log.d(TAG,"decode streamBuffer " + streamBuffer.length);
+                Log.d(TAG, "decode streamBuffer " + streamBuffer.length);
                 bytes_cnt = streamBuffer.length;
                 if (bytes_cnt <= 0) {
                     isDataReady = false;
                     break;
-                }else{
+                } else {
                     isDataReady = true;
                 }
 
@@ -248,53 +221,50 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
                 int remaining = bytes_cnt;
 
 //                while(isDataReady){
-                    if (remaining == 0 || startIndex >= remaining) {
-                        isDataReady = false;
-                        break;
-                    }
+                if (remaining == 0 || startIndex >= remaining) {
+                    isDataReady = false;
+                    break;
+                }
 
-                    int nextFrameStart = 0;
-                    if (isTestLocalFile){
-                        nextFrameStart = findHead(streamBuffer, startIndex + 2, remaining);
-                    }else {
-                        nextFrameStart = findHead(streamBuffer, startIndex, remaining);
-                    }
-                    Log.d(TAG, "nextFrameStart = " + nextFrameStart);
+                int nextFrameStart = 0;
+                if (isTestLocalFile) {
+                    nextFrameStart = findHead(streamBuffer, startIndex + 2, remaining);
+                } else {
+                    nextFrameStart = findHead(streamBuffer, startIndex, remaining);
+                }
+                Log.d(TAG, "nextFrameStart = " + nextFrameStart);
 
-                    if (nextFrameStart == -1) {
-                        nextFrameStart = remaining;
-                        isDataReady = false;
-                        break;
-                    }
+                if (nextFrameStart == -1) {
+                    nextFrameStart = remaining;
+                    isDataReady = false;
+                    break;
+                }
 
-                    try{
+                try {
+                    int inIndex = mAudioDecorder.dequeueInputBuffer(timeoutUs);
+                    Log.d(TAG, "inIndex = " + inIndex);
 
-                        int inIndex = mAudioDecorder.dequeueInputBuffer(timeoutUs);
-                        Log.d(TAG,"inIndex = " + inIndex);
-
-                        if (inIndex >= 0) {
-                            ByteBuffer byteBuffer = mAudioDecorder.getInputBuffer(inIndex);
-                            byteBuffer.clear();
-                            if (isTestLocalFile){
-                                byteBuffer.put(streamBuffer, startIndex, nextFrameStart - startIndex);
-                                mAudioDecorder.queueInputBuffer(inIndex, 0, nextFrameStart - startIndex, 0, 0);
-                                startIndex = nextFrameStart;
+                    if (inIndex >= 0) {
+                        ByteBuffer byteBuffer = mAudioDecorder.getInputBuffer(inIndex);
+                        byteBuffer.clear();
+                        if (isTestLocalFile) {
+                            byteBuffer.put(streamBuffer, startIndex, nextFrameStart - startIndex);
+                            mAudioDecorder.queueInputBuffer(inIndex, 0, nextFrameStart - startIndex, 0, 0);
+                            startIndex = nextFrameStart;
 //                                continue;
-                            }else {
-                                Log.d(TAG,"WEB DATA decoder ");
-                              //  byte[] copy = new byte[streamBuffer.length];
-                                byteBuffer.put(streamBuffer, 0 , streamBuffer.length);
-                                mAudioDecorder.queueInputBuffer(inIndex, 0, streamBuffer.length  , 0, 0);
+                        } else {
+                            Log.d(TAG, "WEB DATA decoder ");
+                            //  byte[] copy = new byte[streamBuffer.length];
+                            byteBuffer.put(streamBuffer, 0, streamBuffer.length);
+                            mAudioDecorder.queueInputBuffer(inIndex, 0, streamBuffer.length, 0, 0);
 //                              //  break;
-                            }
                         }
-
-                    }catch (Exception e){
-                        Log.d(TAG,"decoder Exception " + e.toString());
                     }
+                } catch (Exception e) {
+                    Log.d(TAG, "decoder Exception " + e.toString());
+                }
 //                }
             }
-
         }
 
         public byte[] getBytes(InputStream is) throws IOException {
@@ -315,35 +285,30 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
             Log.d(TAG, "bbbb");
             return buf;
         }
-
-
     }
 
-    public void stop(){
-        try{
-            if (mAudioDecorder != null){
+    public void stop() {
+        try {
+            if (mAudioDecorder != null) {
                 mAudioDecorder.stop();
                 mAudioDecorder = null;
-                Log.d(TAG,"mAudioDecorder stop");
+                Log.d(TAG, "mAudioDecorder stop");
             }
-
-            if (mAudioPlayer != null){
+            if (mAudioPlayer != null) {
                 mAudioPlayer.stop();
                 mAudioPlayer.release();
                 mAudioPlayer = null;
-                Log.d(TAG,"mAudioPlayer stop");
+                Log.d(TAG, "mAudioPlayer stop");
             }
-
-        }catch (Exception e){
+        } catch (Exception e) {
             Log.d(TAG, "stop EXCEPTION " + e.toString());
         }
-
     }
 
-    private void prepare(){
-        Log.d(TAG,"filePath " + filePath);
+    private void prepare() {
+        Log.d(TAG, "filePath " + filePath);
         File tmpFile = new File(filePath);
-        if (tmpFile.exists()){
+        if (tmpFile.exists()) {
             try {
                 mInputStream = new DataInputStream(new FileInputStream(tmpFile));
 
@@ -359,7 +324,7 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
     private boolean isHead(byte[] data, int offset) {
         boolean result = false;
         if (data[offset] == (byte) 0xFF && data[offset + 1] == (byte) 0xF9
-                //&& data[offset + 3] == (byte) 0x80
+            //&& data[offset + 3] == (byte) 0x80
                 ) {
             result = true;
         }
@@ -379,7 +344,4 @@ public class AACDecoder implements TutkSession.RemoteAudioDataMonitor{
         }
         return i;
     }
-
-
-
 }
