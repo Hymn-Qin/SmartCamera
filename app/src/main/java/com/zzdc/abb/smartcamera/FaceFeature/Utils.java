@@ -3,6 +3,7 @@ package com.zzdc.abb.smartcamera.FaceFeature;
 import android.util.Log;
 
 import com.raizlabs.android.dbflow.sql.language.SQLite;
+import com.zzdc.abb.smartcamera.FaceContrast.FaceDatabase_Table;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.LogTool;
 

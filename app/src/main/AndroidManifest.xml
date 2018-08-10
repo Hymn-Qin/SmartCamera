@@ -51,6 +51,12 @@
             android:enabled="true"
             android:exported="true">
         </service>
+
+        <service android:name=".SmartCameraService"
+            android:enabled="true"
+            android:exported="true">
+
+        </service>
     </application>
 
 </manifest>

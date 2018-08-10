@@ -3,6 +3,7 @@ package com.zzdc.abb.smartcamera.controller;
  * camera 1 api
  */
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -30,6 +31,7 @@ import com.ptz.motorControl.MotorManager;
 import com.raizlabs.android.dbflow.config.FlowManager;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.SmartCameraReceiver;
+import com.zzdc.abb.smartcamera.SmartCameraService;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
@@ -53,7 +55,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Button btnStart;
     private Button btnCall;
     private SurfacePreview mSurfacePreview;
-    private boolean RecordRuning = false;
+    public static boolean RecordRuning = false;
     private ApplicationSetting mAplicationSetting = null;
 
     private TutkManager mTutk;
@@ -204,9 +206,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         registerReceiver(receiver, filter);
     }
 
+    @SuppressLint("NewApi")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Intent service = new Intent(this, SmartCameraService.class);
+        this.startForegroundService(service);
+
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         RecordRuning = false;
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -217,7 +224,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         registerResetWifiBroadcast();
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
-        filter.addAction("com.foxconn.alert.camera.play");
         mOneKeyCallReciever = new OneKeyCallReciever();
         registerReceiver(mOneKeyCallReciever, filter);
 
