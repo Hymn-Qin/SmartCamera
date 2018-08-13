@@ -212,8 +212,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onCreate(savedInstanceState);
 
         Intent service = new Intent(this, SmartCameraService.class);
-        this.startForegroundService(service);
-
+//        this.startForegroundService(service);
+        startService(service);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         RecordRuning = false;
         requestWindowFeature(Window.FEATURE_NO_TITLE);

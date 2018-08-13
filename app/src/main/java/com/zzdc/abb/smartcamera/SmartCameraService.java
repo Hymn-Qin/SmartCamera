@@ -33,7 +33,7 @@ public class SmartCameraService extends Service {
     @Override
     public void onCreate() {
 
-        startForeground(1, new Notification());
+//        startForeground(1, new Notification());
         super.onCreate();
     }
 
@@ -47,7 +47,7 @@ public class SmartCameraService extends Service {
 
     @Override
     public void onDestroy() {
-        stopForeground(true);
+//        stopForeground(true);
         super.onDestroy();
     }
 
@@ -73,6 +73,11 @@ public class SmartCameraService extends Service {
                 String type = intent.getStringExtra("type");
                 String message = intent.getStringExtra("message");
                 Log.d("qxj", "get receive -- type = " + type + " message = " + message);
+
+                if (mAvMediaRecorder == null) {
+                    mAvMediaRecorder = AvMediaRecorder.getInstance();
+                }
+
                 if (type.equals("ALERT")) {
                     if (!AvMediaRecorder.AlertRecordRunning){
                         mAvMediaRecorder.startAlertRecord();
@@ -80,9 +85,14 @@ public class SmartCameraService extends Service {
                         mAvMediaRecorder.resetStopTime(0);
                     }
                 } else if (type.equals("Camera")) {
+                    if (MainActivity.mainActivity == null) {
+                        Intent intent1 = new Intent(context, MainActivity.class);
+                        startActivity(intent1);
+                    }
                     if (message.equals("false")) {
                         if (mApplicationSetting.getSystemMonitorOKSetting()) {
                             mApplicationSetting.setSystemMonitorOKSetting(false);
+                            mApplicationSetting.setSystemMonitorSetting(false);
                             if (MainActivity.RecordRuning) {
                                 mAvMediaRecorder.avMediaRecorderStop();
                                 MainActivity.RecordRuning = false;
@@ -93,6 +103,7 @@ public class SmartCameraService extends Service {
 
                         if (!mApplicationSetting.getSystemMonitorOKSetting()) {
                             mApplicationSetting.setSystemMonitorOKSetting(true);
+                            mApplicationSetting.setSystemMonitorSetting(true);
                             if (!MainActivity.RecordRuning) {
                                 mAvMediaRecorder.init();
                                 mAvMediaRecorder.avMediaRecorderStart();

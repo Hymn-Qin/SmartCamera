@@ -20,6 +20,12 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.imagePath;
+import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpFileName;
+import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpMediaFile;
+import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpTime;
+import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.title;
+
 public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener {
 
     private final static String TAG = "qxj";
@@ -38,12 +44,6 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
     private long mLastAudioFrameTimestamp = 0;
     private long mLastVideoFrameTimestamp = 0;
     private boolean isPPSAdded = false;
-
-    private String imagePath;//保存第一帧路径
-    private String title; //保存视频和图片名字
-    private String tmpFileName; // 保存视频名字
-    private long tmpTime; //开始录制时间
-    private String tmpMediaFile; //保存视频路径
 
     private Thread mWorkThread = new Thread("MediaMuxer-thread") {
         @Override
@@ -115,7 +115,6 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
         }
         AudioEncoder.getInstance().unRegisterEncoderListener(this);
         VideoEncoder.getInstance().unRegisterEncoderListener(this);
-        saveBitmap(getBitmap());
     }
 
     @Override
@@ -217,7 +216,7 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
      * 提取第一帧图片
      * @return 返回图片
      */
-    public Bitmap getBitmap() {
+    public static Bitmap getBitmap() {
         MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
         metadataRetriever.setDataSource(tmpMediaFile);
         String w = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
@@ -240,7 +239,7 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
      * 把第一帧保存成图片 在SD卡中
      * @param bitmap
      */
-    public void saveBitmap(Bitmap bitmap) {
+    public static void saveBitmap(Bitmap bitmap) {
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {
             //SD卡 DCIM目录

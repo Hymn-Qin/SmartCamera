@@ -178,6 +178,7 @@ public class AvMediaRecorder {
         mIsMonitor = false;
         if (mMuxer != null) {
             stopRecord();
+            stopAlertRecord();
             mHandler.removeCallbacksAndMessages(null);
         }
         SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
@@ -387,6 +388,7 @@ public class AvMediaRecorder {
                 @Override
                 public void run() {
                     stopAlertRecord();
+                    AlertMediaMuxer.saveBitmap(AlertMediaMuxer.getBitmap());
                 }
             };
             handler.postDelayed(runnable, 30 * 1000);

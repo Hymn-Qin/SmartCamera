@@ -200,26 +200,6 @@ public class TutkCmdManager {
                 AudioGather.getInstance().startRecord();
                 PCMAudioDataTransfer.getInstance().changeVoiceMode(PCMAudioDataTransfer.TELEPHONY_OFF_MODE);
                 break;
-            case "START_MONITOR":
-                Log.d(TAG, "START_MONITOR");
-                if (mAvMediaRecorder == null) {
-                    mAvMediaRecorder = AvMediaRecorder.getInstance();
-                }
-                mAplicationSetting = ApplicationSetting.getInstance();
-                mAplicationSetting.setSystemMonitorSetting(true);
-                mAvMediaRecorder.init();
-                mAvMediaRecorder.avMediaRecorderStart();
-                break;
-            case "STOP_MONITOR":
-                Log.d(TAG, "STOP_MONITOR");
-                mAplicationSetting = ApplicationSetting.getInstance();
-                mAplicationSetting.setSystemMonitorSetting(false);
-                if (mAvMediaRecorder == null) {
-                    mAvMediaRecorder = AvMediaRecorder.getInstance();
-                }
-                mAvMediaRecorder.avMediaRecorderStop();
-                break;
-
             case "getHistoryInfoList":
                 Log.d(TAG, " getHistoryInfoList ");
                 mHistoryManager = HistoryManager.getInstance();
