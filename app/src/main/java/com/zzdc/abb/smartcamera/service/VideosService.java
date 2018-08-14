@@ -148,8 +148,8 @@ public class VideosService extends Service {
             meidaPlayer.prepare();
             second = meidaPlayer.getDuration();
             meidaPlayer.reset();
-        } catch (IOException e) {
-            LogTool.w(TAG, "Get video duration with exception, ", e);
+        } catch (Exception e) {
+            LogTool.w(TAG, "Get video duration with exception : ", e);
         }
         return second;
     }

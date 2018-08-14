@@ -356,27 +356,35 @@ public class VideoGather {
 
                 if(NightModeState == NightModeOff){
                     if(NightModeEnable){
-                        Camera.Parameters params = mCamera.getParameters();
-                        List<String> ColorEffects = params.getSupportedColorEffects();
-                        if (ColorEffects.contains(
-                                Camera.Parameters.EFFECT_MONO)) {
-                            params.setColorEffect(Camera.Parameters.EFFECT_MONO);
+                        try {
+                            Camera.Parameters params = mCamera.getParameters();
+                            List<String> ColorEffects = params.getSupportedColorEffects();
+                            if (ColorEffects.contains(
+                                    Camera.Parameters.EFFECT_MONO)) {
+                                params.setColorEffect(Camera.Parameters.EFFECT_MONO);
+                            }
+                            params.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
+                            mCamera.setParameters(params);
+                            NightModeState = NightModeOn;
+                        } catch (Exception e) {
+                            LogTool.e(TAG,"NightModeOff operate Camera.Parameters with exception : ",e);
                         }
-                        params.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
-                        mCamera.setParameters(params);
-                        NightModeState = NightModeOn;
                     }
                 }else if(NightModeState == NightModeOn){
                     if(NightModeEnable == false){
-                        Camera.Parameters params = mCamera.getParameters();
-                        List<String> ColorEffects = params.getSupportedColorEffects();
-                        if (ColorEffects.contains(
-                                Camera.Parameters.EFFECT_NONE)) {
-                            params.setColorEffect(Camera.Parameters.EFFECT_NONE);
+                        try {
+                            Camera.Parameters params = mCamera.getParameters();
+                            List<String> ColorEffects = params.getSupportedColorEffects();
+                            if (ColorEffects.contains(
+                                    Camera.Parameters.EFFECT_NONE)) {
+                                params.setColorEffect(Camera.Parameters.EFFECT_NONE);
+                            }
+                            params.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+                            mCamera.setParameters(params);
+                            NightModeState = NightModeOff;
+                        } catch (Exception e) {
+                            LogTool.e(TAG,"NightModeOn operate Camera.Parameters with exception : ",e);
                         }
-                        params.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
-                        mCamera.setParameters(params);
-                        NightModeState = NightModeOff;
                     }
                 }
             }

@@ -115,6 +115,8 @@ public class AvMediaRecorder {
     }
 
     public void init() {
+        //提取人脸数据
+        Utils.startGetFeature("qin");
         if (!mAudioGather.AudioGatherRuning) {
             mAudioGather.SetAudioSourceTypeForMonitor();
             mAudioGather.prepareAudioRecord();
@@ -135,16 +137,6 @@ public class AvMediaRecorder {
         filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
         filter.addDataScheme("file");
         SmartCameraApplication.getContext().registerReceiver(mReceiver, filter);
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Log.d("qxj", "开始人脸提取");
-                //提取人脸数据
-                Utils.startToSaveFeature("qin", Utils.getFaceImagePath());
-            }
-        }).start();
-
     }
 
     public void avMediaRecorderStart() {
@@ -335,6 +327,10 @@ public class AvMediaRecorder {
     public static boolean AlertRecordRunning = false;
 
     public void startAlertRecord() {
+        if (!mIsMonitor) {
+            Log.d("qxj", "this AvMediaRecorder status is ---" + mIsMonitor);
+            return;
+        }
         Log.d("qxj", "startAlertRecord---");
         alertMuxer = new AlertMediaMuxer();
         AlertRecordRunning = true;
@@ -422,6 +418,7 @@ public class AvMediaRecorder {
 
     //初始化 视频人脸识别
     private void startVideoFaceContrast() {
+        Log.d("qxj", "开始人脸识别");
         List<FaceDatabase> faceDatabaseList = Utils.getAllFaceData();
         List<FaceDatabase> focusDatabaseList = Utils.getFocusFaceData();
         FeatureContrastManager feature = FeatureContrastManager.getInstance();

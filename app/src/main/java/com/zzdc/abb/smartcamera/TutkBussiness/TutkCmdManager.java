@@ -1,6 +1,9 @@
 package com.zzdc.abb.smartcamera.TutkBussiness;
 
 import android.content.Context;
+import android.graphics.ImageFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.media.AudioManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -10,6 +13,7 @@ import com.ptz.PTZControl.PTZControlManager;
 import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
 import com.tutk.IOTC.AVIOCTRLDEFs;
+import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.AACDecoder;
 import com.zzdc.abb.smartcamera.controller.AlertHistoryManager;
@@ -26,7 +30,11 @@ import com.zzdc.abb.smartcamera.util.LogTool;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -271,6 +279,32 @@ public class TutkCmdManager {
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
+                break;
+            case "setFacePictures":
+                try {
+                    JSONObject jsonObject = new JSONObject(receiveJsonStr);
+                    // TODO
+                    for (int i = 0; i < 3; i++) {
+                        if (buf.length < 3) return;
+
+                        File file = Utils.getFacePictureFile("name 0" + i);
+                        if (file == null) return;
+                        //图片的 宽高
+                        FileOutputStream outputStream = null;
+                        outputStream = new FileOutputStream(file);
+
+                        YuvImage image = new YuvImage(buf, ImageFormat.NV21, 1080, 960, null);
+                        image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+                    }
+
+                    //提取人脸数据
+                    Utils.startGetFeature("qin");
+                } catch (JSONException | FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+                break;
+            case "getImage":
+
                 break;
             case "getAlertInfoList":
                 Log.d("qxj", " getAlertInfoList ");

@@ -91,6 +91,8 @@ public class AudioEncoder implements AudioGather.AudioRawDataListener{
 
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                } catch (IllegalStateException e) {
+                    LogTool.e(TAG,"AudioBuf onInputBufferAvailable error !!! ",e);
                 }
 
             }

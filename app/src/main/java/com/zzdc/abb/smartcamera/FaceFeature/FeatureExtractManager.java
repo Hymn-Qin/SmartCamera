@@ -23,8 +23,8 @@ public class FeatureExtractManager {
     private AFD_FSDKEngine AFD;
     private AFR_FSDKEngine AFR;
 
-    private String faceImagePath;
-    private String faceName;
+    private static String faceImagePath;
+    private static String faceName;
     /**
      * 人脸数据提取
      * <p>
@@ -160,6 +160,7 @@ public class FeatureExtractManager {
             convert.destroy();
             facePIC = new FacePictures();
             facePIC.setNV21(data);
+            facePIC.setName(faceName);
             facePIC.setFileName(path);
             facePIC.setWidth(temp.getWidth());
             facePIC.setHigh(exeHigh(temp.getHeight()));
@@ -190,10 +191,10 @@ public class FeatureExtractManager {
     /***
      * 识别文件夹下的所有图片的人脸信息 并保存
      */
-    public ArrayList<byte[]> getFRToExtractFeature() {
+    public ArrayList<FaceDatabase> getFRToExtractFeature() {
         InitFaceFeatureManager();
         List<FacePictures> facePicCacheList = getFaceImageList(faceImagePath);
-        ArrayList<byte[]> faceDataList = new ArrayList<>();
+        ArrayList<FaceDatabase> faceDataList = new ArrayList<>();
         if (facePicCacheList == null || facePicCacheList.size() == 0) {
             Log.d(TAG, "  facePicCacheList is null !!  pls help to check it !!");
             return null;//獲取人臉失敗
@@ -211,7 +212,7 @@ public class FeatureExtractManager {
             error_FD = AFD.AFD_FSDK_StillImageFaceDetection(facePIC.getNV21(), facePIC.getWidth(), facePIC.getHigh(), AFD_FSDKEngine.CP_PAF_NV21, result_FD);
             Log.d(TAG, "AFD.AFD_FSDK_StillImageFaceDetection  !! ResultCode = " + error_FD.getCode() + " facePIC = " + facePIC.getFileName());
             if (error_FD.getCode() != 0) {
-                Log.d(TAG, "人脸数据提取错误 name >> " + faceName + error_FD.toString());
+                Log.d(TAG, "人脸数据提取错误 name >> " + facePIC.getName() + error_FD.toString());
                 continue;
             }
             if (result_FD.size() <= 0) {
@@ -227,13 +228,16 @@ public class FeatureExtractManager {
                 int degree = item.getDegree(); // 人脸方向
                 error_FR = AFR.AFR_FSDK_ExtractFRFeature(facePIC.getNV21(), facePIC.getWidth(), facePIC.getHigh(), AFR_FSDKEngine.CP_PAF_NV21, itemRect, degree, face); // 提取人脸信息
                 if (error_FR.getCode() != 0) {
-                    Log.d(TAG, "人脸特征数据提取错误 name >> " + faceName + error_FR.toString());
+                    Log.d(TAG, "人脸特征数据提取错误 name >> " + facePIC.getName() + error_FR.toString());
                     continue;
                 }
                 byte[] faceData = face.getFeatureData();//人脸数据
-
-                faceDataList.add(faceData);
-                Log.d(TAG, "获取到人脸数据 name >> " + faceName);
+                FaceDatabase faceDataBean = new FaceDatabase();
+                faceDataBean.face = faceData;
+                faceDataBean.name = facePIC.getName();
+                faceDataBean.direction = facePIC.getFileName();
+                faceDataList.add(faceDataBean);
+                Log.d(TAG, "获取到人脸数据 name >> " + facePIC.getName());
             }
         }
         UninitFaceFeatureManager();
@@ -243,7 +247,16 @@ public class FeatureExtractManager {
         private int width;
         private int high;
         private byte[] NV21;
+        private String name;
         private String fileName;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
 
         public String getFileName() {
             return fileName;

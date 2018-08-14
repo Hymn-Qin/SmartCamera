@@ -56,8 +56,12 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                     }
                 }
             }
-            mMediaMuxer.stop();
-            mMediaMuxer.release();
+            try {
+                mMediaMuxer.stop();
+                mMediaMuxer.release();
+            } catch (Exception e) {
+                LogTool.e(TAG,"Stop MediaMuxer failed!!! : ",e);
+            }
             LogTool.d(TAG, "Media muxer thread stop.");
         }
     };

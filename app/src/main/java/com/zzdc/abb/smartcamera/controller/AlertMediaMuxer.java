@@ -8,6 +8,7 @@ import android.media.MediaMuxer;
 import android.os.Environment;
 import android.util.Log;
 
+import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
@@ -19,12 +20,6 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
-
-import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.imagePath;
-import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpFileName;
-import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpMediaFile;
-import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.tmpTime;
-import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.title;
 
 public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener {
 
@@ -53,6 +48,9 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             while (mMuxering) {
                 EncoderBuffer data = null;
                 try {
+                    if (mMuxerDatas == null) {
+                        continue;
+                    }
                     data = mMuxerDatas.take();
                     if (data.getTrack() == TRACK_VIDEO) {
                         mMediaMuxer.writeSampleData(mVideoTrackIndex, data.getByteBuffer(), data.getBufferInfo());
@@ -69,8 +67,13 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
                     }
                 }
             }
-            mMediaMuxer.stop();
-            mMediaMuxer.release();
+            try {
+                mMediaMuxer.stop();
+                mMediaMuxer.release();
+
+            } catch (Exception e) {
+                LogTool.e(TAG,"Stop MediaMuxer failed!!! : ",e);
+            }
             LogTool.d(TAG, "Media muxer thread stop.");
         }
     };
@@ -86,10 +89,10 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             LogTool.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
             return false;
         } else {
-            tmpMediaFile = generateVideoFileName();
+            FaceConfig.tmpMediaFile = generateVideoFileName();
             try {
                 LogTool.d(TAG, "Create MediaMuxer start");
-                mMediaMuxer = new MediaMuxer(tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                mMediaMuxer = new MediaMuxer(FaceConfig.tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             }catch (Exception e){
                 LogTool.e(TAG, "Create MediaMuxer with exception, ", e);
                 return false;
@@ -110,9 +113,9 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
     public void stopMediaMuxer() {
         LogTool.d(TAG, "Stop media muxer");
         mMuxering = false;
-        if (mWorkThread != null) {
-            mWorkThread.interrupt();
-        }
+//        if (mWorkThread != null) {
+//            mWorkThread.interrupt();
+//        }
         AudioEncoder.getInstance().unRegisterEncoderListener(this);
         VideoEncoder.getInstance().unRegisterEncoderListener(this);
     }
@@ -185,9 +188,9 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
 
     private String generateVideoFileName() {
         String tmpPath = "";
-        tmpTime = System.currentTimeMillis();
-        title = createName(tmpTime);
-        tmpFileName = title + ".mp4";
+        FaceConfig.tmpTime = System.currentTimeMillis();
+        FaceConfig.title = createName(FaceConfig.tmpTime);
+        FaceConfig.tmpFileName = FaceConfig.title + ".mp4";
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {
             //SD卡 DCIM目录
@@ -196,7 +199,7 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             if (!mkDir.exists()) {
                 mkDir.mkdirs();   //目录不存在，则创建
             }
-            tmpPath = tmpDir + '/' + tmpFileName;
+            tmpPath = tmpDir + '/' + FaceConfig.tmpFileName;
             LogTool.d(TAG, "tmpPath " + tmpPath);
         } else {
             Log.d(TAG, "sd卡不存在");
@@ -217,14 +220,15 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
      * @return 返回图片
      */
     public static Bitmap getBitmap() {
+        Log.d("qxj", " 开始生成第一帧图片 " + FaceConfig.tmpMediaFile);
         MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
-        metadataRetriever.setDataSource(tmpMediaFile);
+        metadataRetriever.setDataSource(FaceConfig.tmpMediaFile);
         String w = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
         String h = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
         metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
 
         Bitmap bitmap = null;
-        for (long i = tmpTime; i < 30000; i += 1000) {
+        for (long i = FaceConfig.tmpTime; i < 30000; i += 1000) {
             bitmap = metadataRetriever.getFrameAtTime(i * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if (bitmap != null) {
                 break;
@@ -240,6 +244,11 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
      * @param bitmap
      */
     public static void saveBitmap(Bitmap bitmap) {
+        Log.d("qxj", " 开始保存第一帧图片 ");
+        if (bitmap == null) {
+            Log.d("qxj", " 保存第一帧图片失败 bitmap 为空");
+            return;
+        }
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {
             //SD卡 DCIM目录
@@ -250,17 +259,19 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             }
 
             try {
-                imagePath = tmpBussiness.getSDCardVideoRootPath() + "/" + "ALERT" + "/" + title + ".jpg";
-                File file = new File(imagePath);
+                FaceConfig.imagePath = tmpBussiness.getSDCardVideoRootPath() + "/" + "ALERT" + "/" + FaceConfig.title + ".jpg";
+                Log.d("qxj", " 保存第一帧图片 name -- " + FaceConfig.imagePath);
+                File file = new File(FaceConfig.imagePath);
                 if (!file.exists()) {
                     file.getParentFile().mkdirs();
                     file.createNewFile();
                 }
 
                 FileOutputStream fos = new FileOutputStream(file);
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
                 fos.flush();
                 fos.close();
+
             } catch (IOException e) {
                 e.printStackTrace();
             }

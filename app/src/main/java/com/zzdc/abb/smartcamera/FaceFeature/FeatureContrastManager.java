@@ -13,6 +13,9 @@ import com.arcsoft.facerecognition.AFR_FSDKEngine;
 import com.arcsoft.facerecognition.AFR_FSDKError;
 import com.arcsoft.facerecognition.AFR_FSDKFace;
 import com.arcsoft.facerecognition.AFR_FSDKMatching;
+import com.arcsoft.facetracking.AFT_FSDKEngine;
+import com.arcsoft.facetracking.AFT_FSDKError;
+import com.arcsoft.facetracking.AFT_FSDKFace;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
 
@@ -38,6 +41,7 @@ public class FeatureContrastManager {
 
     private AFD_FSDKEngine AFD;
     private AFR_FSDKEngine AFR;
+    private AFT_FSDKEngine AFT;
 
     private boolean isStartImageOK = false;
     private boolean isStartImage = false;
@@ -60,6 +64,7 @@ public class FeatureContrastManager {
     private void InitFaceFeatureManager() {
         AFD = getAFD_FSDKEngine();//初始化搜集人脸
         AFR = getAFR_FSDKEngine();//初始化人脸特征提取比对
+        AFT = getAFT_FSDKEngine();
     }
 
     /**
@@ -71,6 +76,9 @@ public class FeatureContrastManager {
         }
         if (AFR != null) {
             AFR.AFR_FSDK_UninitialEngine();
+        }
+        if (AFT != null) {
+            AFT.AFT_FSDK_UninitialFaceEngine();
         }
     }
 
@@ -180,6 +188,18 @@ public class FeatureContrastManager {
         }
     }
 
+    //初始化人脸追踪引擎
+    private static AFT_FSDKEngine getAFT_FSDKEngine() {
+        AFT_FSDKEngine FTDKEngine = new AFT_FSDKEngine();
+        AFT_FSDKError err = FTDKEngine.AFT_FSDK_InitialFaceEngine(FaceConfig.faceAPP_Id, FaceConfig.faceFT_KEY, AFT_FSDKEngine.AFT_OPF_0_HIGHER_EXT, FaceConfig.scale, FaceConfig.maxContrastFacesNUM);
+        if (err.getCode() == 0) {
+            return FTDKEngine;
+        } else {
+            Log.d(TAG, "getAFD_FSDKEngine >> AFD_FSDK_InitialFaceEngine = " + err.getCode());
+            return null;
+        }
+    }
+
     //人脸比对 设置 家庭人员人脸数据 重点关注人员人脸数据
     public void setFamilyFace(List<FaceDatabase> familyFaceDataBeans) {
         ArrayList<FaceFRBean> faceFRBeans = faceDataToFaceFR(familyFaceDataBeans);
@@ -216,10 +236,11 @@ public class FeatureContrastManager {
         if (familyFaceFRBeans == null || familyFaceFRBeans.size() == 0) {
             return;
         }
-        if (AFD == null || AFR == null) {
+        if (AFD == null || AFR == null || AFT == null) {
             Log.d(TAG, "startContrastFeature  AFD && AFR init failed");
             AFD = getAFD_FSDKEngine();//初始化搜集人脸
             AFR = getAFR_FSDKEngine();//初始化人脸特征提取比对
+            AFT = getAFT_FSDKEngine();
         }
         AFD_FSDKError error_FD;
         AFR_FSDKError error_FR;
@@ -247,7 +268,7 @@ public class FeatureContrastManager {
             }
             byte[] faceData = face.getFeatureData();//人脸数据
             Log.d(TAG, "获取到人脸数据 坐标为 : left = " + itemRect.left + " right :" + itemRect.right + " top :" + itemRect.top + " bottom :" + itemRect.bottom);
-            contrastFaceFeature(faceData, itemRect, degree);
+            contrastFaceFeature(faceData, itemRect, degree, width, height);
         }
     }
 
@@ -259,7 +280,7 @@ public class FeatureContrastManager {
      * @param rect 人脸坐标
      * @param ori  人脸角度
      */
-    private void contrastFaceFeature(byte[] face, Rect rect, int ori) {
+    private void contrastFaceFeature(byte[] face, Rect rect, int ori, int width, int height) {
         AFR_FSDKError error_FR;
 
         AFR_FSDKFace fsdkFace = new AFR_FSDKFace();
@@ -285,16 +306,41 @@ public class FeatureContrastManager {
                     //开始生成图片
 
                 }
-            } else {
-                //当前人脸时陌生人
-                Log.d(TAG, "人脸比对结果 是陌生人 ");
-                AvMediaRecorder mAvMediaRecorder = AvMediaRecorder.getInstance();
-                if (!AvMediaRecorder.AlertRecordRunning) {
-                    mAvMediaRecorder.startAlertRecord();
-                } else {
-                    mAvMediaRecorder.resetStopTime(1);
-                }
+                return;
             }
+        }
+
+        //当前人脸是陌生人
+        Log.d(TAG, "人脸比对结果 是陌生人 ");
+        Log.d(TAG, "开始追踪陌生人 ");
+        cameraTrackStranger(face, width, height);
+    }
+
+    private void cameraTrackStranger(byte[] face, int width, int height) {
+        //陌生人开始录制警告视频
+        startAlertVideo();
+        //开始追踪人脸
+        AFT_FSDKError error_FT;
+        List<AFT_FSDKFace> result_FT = new ArrayList<>();
+        error_FT = AFT.AFT_FSDK_FaceFeatureDetect(face, width, height, AFT_FSDKEngine.CP_PAF_NV21, result_FT);
+        if (error_FT.getCode() != 0) {
+            Log.d(TAG, "人脸追踪出错 >> " + error_FT.toString());
+            return;
+        }
+        if (result_FT.size() <= 0) {
+            return;
+        }
+        for (AFT_FSDKFace faceFT : result_FT) {
+            Log.d(TAG, "人脸追踪 >> " + faceFT.toString());
+        }
+    }
+
+    private void startAlertVideo() {
+        AvMediaRecorder mAvMediaRecorder = AvMediaRecorder.getInstance();
+        if (!AvMediaRecorder.AlertRecordRunning) {
+            mAvMediaRecorder.startAlertRecord();
+        } else {
+            mAvMediaRecorder.resetStopTime(1);
         }
     }
 
@@ -359,7 +405,7 @@ public class FeatureContrastManager {
             File file = getImageFile();
             if (file == null) return;
             FileOutputStream outputStream = new FileOutputStream(file);
-            YuvImage image = new YuvImage(data , ImageFormat.NV21, 2, 2, null);
+            YuvImage image = new YuvImage(data, ImageFormat.NV21, 2, 2, null);
             image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -392,11 +438,6 @@ public class FeatureContrastManager {
         }
         return null;
     }
-
-//    private String getImageName () {
-//
-//    }
-
 
     public static class FacePictures {
         private int width;

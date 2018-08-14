@@ -107,6 +107,8 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
                     }
                 } catch(InterruptedException e){
                     LogTool.w(TAG, "Take Video raw data from queue with exception. ", e);
+                } catch (IllegalStateException e) {
+                    LogTool.e(TAG,"VideoRawBuf onInputBufferAvailable error !!! ",e);
                 }
             }
             unregisterVideoRawDataListener();
@@ -265,7 +267,11 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         mEncoder.reset();
         mEncoder.setCallback(mEncodeCallback);
         mEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        mEncoder.start();
+        try {
+            mEncoder.start();
+        } catch (Exception e) {
+            LogTool.e(TAG,"Start mediaCodec failed!!! : ",e);
+        }
         mVideoGather.registerVideoRawDataListener(this);
         mEncoding = true;
         mStartTimeUs = System.currentTimeMillis() * 1000;

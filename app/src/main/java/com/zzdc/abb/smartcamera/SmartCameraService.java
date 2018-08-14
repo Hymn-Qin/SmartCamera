@@ -17,22 +17,22 @@ import com.zzdc.abb.smartcamera.controller.MainActivity;
 
 public class SmartCameraService extends Service {
 
+    private static final String TAG = "SmartCameraServiceQXJ";
 
     private AvMediaRecorder mAvMediaRecorder;
 
     private ApplicationSetting mApplicationSetting;
 
-    ABBCallReceiver abbCallReceiver;
+    private ABBCallReceiver abbCallReceiver;
 
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        throw new UnsupportedOperationException("Not yet implemented");
     }
 
     @Override
     public void onCreate() {
-
 //        startForeground(1, new Notification());
         super.onCreate();
     }
@@ -47,53 +47,53 @@ public class SmartCameraService extends Service {
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(abbCallReceiver);
 //        stopForeground(true);
+
         super.onDestroy();
     }
 
     private void initData() {
-        mAvMediaRecorder = AvMediaRecorder.getInstance();
-        mApplicationSetting = ApplicationSetting.getInstance();
-
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.foxconn.alert.camera.play");
         abbCallReceiver = new ABBCallReceiver();
         registerReceiver(abbCallReceiver, filter);
+
+        mAvMediaRecorder = AvMediaRecorder.getInstance();
+        mApplicationSetting = ApplicationSetting.getInstance();
     }
 
     public class ABBCallReceiver extends BroadcastReceiver {
 
-        private final String  TAG = MainActivity.OneKeyCallReciever.class.getSimpleName();
         @Override
         public void onReceive(Context context, Intent intent) {
-            // TODO: This method is called when the BroadcastReceiver is receiving
             // an Intent broadcast.
             Log.e(TAG, "onReceive " + intent.getAction());
             if (intent.getAction().equalsIgnoreCase("com.foxconn.alert.camera.play")) {
                 String type = intent.getStringExtra("type");
                 String message = intent.getStringExtra("message");
-                Log.d("qxj", "get receive -- type = " + type + " message = " + message);
+                Log.d(TAG, "get receive -- type = " + type + " message = " + message);
+//                if (type.equals("ALERT")) {
+//                    if (!AvMediaRecorder.AlertRecordRunning) {
+//                        mAvMediaRecorder.startAlertRecord();
+//                    } else {
+//                        mAvMediaRecorder.resetStopTime(0);
+//                    }
+//                } else
+                    if (type.equals("Camera")) {
 
-                if (mAvMediaRecorder == null) {
-                    mAvMediaRecorder = AvMediaRecorder.getInstance();
-                }
-
-                if (type.equals("ALERT")) {
-                    if (!AvMediaRecorder.AlertRecordRunning){
-                        mAvMediaRecorder.startAlertRecord();
-                    } else {
-                        mAvMediaRecorder.resetStopTime(0);
-                    }
-                } else if (type.equals("Camera")) {
                     if (MainActivity.mainActivity == null) {
-                        Intent intent1 = new Intent(context, MainActivity.class);
-                        startActivity(intent1);
+                        Intent ac = new Intent(context, MainActivity.class);
+                        context.startActivity(ac);
                     }
-                    if (message.equals("false")) {
+                    if (mAvMediaRecorder == null) {
+                        mAvMediaRecorder = AvMediaRecorder.getInstance();
+                    }
+                    if (message.equals("false")) {  
                         if (mApplicationSetting.getSystemMonitorOKSetting()) {
                             mApplicationSetting.setSystemMonitorOKSetting(false);
                             mApplicationSetting.setSystemMonitorSetting(false);
-                            if (MainActivity.RecordRuning) {
+                            if (MainActivity.mainActivity != null && MainActivity.RecordRuning) {
                                 mAvMediaRecorder.avMediaRecorderStop();
                                 MainActivity.RecordRuning = false;
                             }
@@ -104,17 +104,21 @@ public class SmartCameraService extends Service {
                         if (!mApplicationSetting.getSystemMonitorOKSetting()) {
                             mApplicationSetting.setSystemMonitorOKSetting(true);
                             mApplicationSetting.setSystemMonitorSetting(true);
-                            if (!MainActivity.RecordRuning) {
+                            if (MainActivity.mainActivity != null && !MainActivity.RecordRuning) {
                                 mAvMediaRecorder.init();
                                 mAvMediaRecorder.avMediaRecorderStart();
                                 MainActivity.RecordRuning = true;
                             }
                         }
                     }
-                    Log.d("qxj", "send com.foxconn.zzdc.broadcast.camera receive -- type = " + type + " message = " + message);
+                    Log.d(TAG, "send com.foxconn.zzdc.broadcast.camera receive -- type = " + type + " message = " + message);
                     Intent intents = new Intent("com.foxconn.zzdc.broadcast.camera");
                     intents.putExtra("type", type);
-                    intents.putExtra("result", message);
+                    if (MainActivity.mainActivity == null) {
+                        intents.putExtra("result", "false");
+                    } else {
+                        intents.putExtra("result", "true");
+                    }
                     context.sendBroadcast(intents);
                 }
             }

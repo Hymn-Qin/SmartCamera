@@ -46,7 +46,7 @@ public class AlertHistoryManager {
         JSONObject objectForVideoInfo = new JSONObject();
         if(!mSDCardBussiness.isSDCardAvailable()){
             try {
-                objectForVideoInfo.put("type", "getHistoryInfoList");
+                objectForVideoInfo.put("type", "getAlertInfoList");
                 objectForVideoInfo.put("ret", "-1");
             }catch (Exception e){
                 LogTool.d(TAG," Exception " + e.toString());
@@ -66,7 +66,7 @@ public class AlertHistoryManager {
                 oneTimeQuantum.put("mEnd",cursor.getString(cursor.getColumnIndex("mEnd")));
                 timeQuantumArray.put(oneTimeQuantum);
                 if(i%10 == 0 ||i == (cursor.getCount() - 1)){
-                    objectForVideoInfo.put("type", "getHistoryInfoList");
+                    objectForVideoInfo.put("type", "getAlertInfoList");
                     objectForVideoInfo.put("ret", "0");
                     objectForVideoInfo.put("DateArray", timeQuantumArray);
                     videosInfo.add(objectForVideoInfo.toString());
