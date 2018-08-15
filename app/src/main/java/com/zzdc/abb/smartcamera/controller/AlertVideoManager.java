@@ -271,9 +271,9 @@ public class AlertVideoManager {
         }
 
         mExtrator = new MP4Extrator(mDestFile, mDestTime, mVideoStartTime);
-        int tmpResult = mExtrator.init();
+        boolean tmpResult = mExtrator.init();
         Log.d(TAG,"mExtrator.init " + tmpResult);
-        if(tmpResult == 0){
+        if(tmpResult){
             mExtrator.start();
         }
         return 0;
