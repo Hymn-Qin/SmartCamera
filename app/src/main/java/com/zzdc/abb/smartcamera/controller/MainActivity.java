@@ -30,14 +30,12 @@ import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
 import com.raizlabs.android.dbflow.config.FlowManager;
 import com.zzdc.abb.smartcamera.R;
-import com.zzdc.abb.smartcamera.SmartCameraReceiver;
 import com.zzdc.abb.smartcamera.SmartCameraService;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.Device;
 import com.zzdc.abb.smartcamera.util.LogTool;
-import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 import com.zzdc.abb.smartcamera.util.TUTKUIDUtil;
 import com.zzdc.abb.smartcamera.util.WindowUtils;
 

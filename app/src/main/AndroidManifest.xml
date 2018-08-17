@@ -27,15 +27,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <receiver
-            android:name=".SmartCameraReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter android:priority="3">
-                <action android:name="android.intent.action.MEDIA_MOUNTED" />
-                <data android:scheme="file"/>
-            </intent-filter>
-        </receiver>
 
         <activity
             android:name=".controller.MainActivity"
@@ -46,11 +37,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".service.VideosService"
-            android:enabled="true"
-            android:exported="true">
-        </service>
 
         <service android:name=".SmartCameraService"
             android:enabled="true"
