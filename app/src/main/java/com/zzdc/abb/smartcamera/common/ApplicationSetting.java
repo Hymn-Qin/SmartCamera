@@ -2,6 +2,7 @@ package com.zzdc.abb.smartcamera.common;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 
 public class ApplicationSetting {
     private static final String PREFERENCE = "com.zzdc.abb.smartcamera";

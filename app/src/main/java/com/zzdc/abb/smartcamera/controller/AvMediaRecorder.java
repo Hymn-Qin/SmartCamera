@@ -12,11 +12,13 @@ import android.os.Message;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
+import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceDatabase;
 import com.zzdc.abb.smartcamera.FaceFeature.FeatureContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.common.Constant;
+import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 
 import java.io.File;
@@ -37,26 +39,22 @@ public class AvMediaRecorder {
     private AudioEncoder mAudioEncoder;
     private VideoEncoder mVideoEncoder;
     private PCMAudioDataTransfer mPCMAudioDataTransfer;
-    private SDCardBussiness mSDCardBussiness;
     private static final int START_RECORD = 200;
     private static final int STOP_RECORD = 201;
     private static final int WAIT_TO_START = 203;
     private static final int CHECK_STORAGE = 204;
-    private static String VIDEO_ROOT_PATH;
     private static int SD_MEM_THRESHOLD = 300; //SD card mem threshold
     public boolean ABBassistantRuning = true;
-    private SDCardBroadcastReceiver mReceiver;
-    private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
+	private SDCardBroadcastReceiver mReceiver;
+	private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
 
-    private boolean RecordSwitch = true;
-
-    private Handler mHandler = new Handler() {
+    private Handler mHandler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
             switch (msg.what) {
                 case START_RECORD:
-                    if (mIsMonitor) {
+                    if (mIsMonitor){
                         startRecord();
                     }
                     break;
@@ -64,12 +62,9 @@ public class AvMediaRecorder {
                     stopRecord();
                     break;
                 case WAIT_TO_START:
-                    if (mIsMonitor) {
+                    if(mIsMonitor){
                         waitForStart();
                     }
-                    break;
-                case CHECK_STORAGE:
-                    deleteEarlyestFileIfNeed();
                     break;
                 default:
                     break;
@@ -77,18 +72,16 @@ public class AvMediaRecorder {
         }
     };
 
-    public class SDCardBroadcastReceiver extends BroadcastReceiver {
+    public class SDCardBroadcastReceiver extends BroadcastReceiver{
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)) {
-                Log.d(TAG, "SDCard is removed!!! so begin stop recorder.");
+            if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)){
+                LogTool.d(TAG,"Intent.ACTION_MEDIA_EJECT");
                 stopRecord();
-
-            } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)) {
-                Log.d(TAG, "Intent.ACTION_MEDIA_MOUNTED");
-                VIDEO_ROOT_PATH = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM/";
-                deleteEarlyestFileIfNeed();
-                Log.d(TAG, "SDCardAvailable make Record");
+                MediaStorageManager.getInstance().stop();
+            } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)){
+                Log.d(TAG,"Intent.ACTION_MEDIA_MOUNTED");
+                MediaStorageManager.getInstance().start();
                 startRecord();
             }
         }
@@ -109,7 +102,6 @@ public class AvMediaRecorder {
         mVideoGather = VideoGather.getInstance();
         mVideoEncoder = VideoEncoder.getInstance();
 
-        mSDCardBussiness = SDCardBussiness.getInstance();
         mPCMAudioDataTransfer = PCMAudioDataTransfer.getInstance();
 
     }
@@ -149,20 +141,15 @@ public class AvMediaRecorder {
         if (!mAudioEncoder.isRunning()) {
             mAudioEncoder.start();
         }
-        if (mSDCardBussiness.isSDCardAvailable()) {
-            VIDEO_ROOT_PATH = mSDCardBussiness.getSDCardVideoRootPath() + "/" + "DCIM/";
+        //开始人脸识别
+//        startVideoFaceContrast();
 
-            deleteEarlyestFileIfNeed();
-            Log.d(TAG, "SDCardAvailable make Record");
+        if(MediaStorageManager.getInstance().isReady()){
             startRecord();
-
-        } else {
-            Log.d(TAG, "SDCard not Available");
+        }else {
+            Log.d(TAG,"MediaStorageManager not ready");
         }
         mIsMonitor = true;
-
-        //开始人脸识别
-        startVideoFaceContrast();
     }
 
     public void avMediaRecorderStop() {
@@ -214,180 +201,96 @@ public class AvMediaRecorder {
         return mRecorder;
     }
 
-
-    private void startRecord() {
-        Log.d(TAG, "startRecord");
-        if (!mSDCardBussiness.isSDCardAvailable()) {
-            Log.d(TAG, "SD card removed ");
+    private void startRecord(){
+        Log.d(TAG ,"startRecord");
+        if(!MediaStorageManager.getInstance().isReady()){
+            Log.d(TAG,"MediaStorageManager hasn't ready");
             return;
         }
-        deleteEarlyestFileIfNeed();
         mMuxer = new AvMediaMuxer();
         waitForStart();
     }
 
-    private void waitForStart() {
-        if (mSDCardBussiness.isSDCardAvailable()) {
-            long tmpAvailableSpace = mSDCardBussiness.getAvailableSpace();
-            if (tmpAvailableSpace < SD_MEM_THRESHOLD) {
-                Log.d(TAG, "AvailableSpace < 300M");
-                deleteEarlyestFileIfNeed();
-            }
-
-            if (mMuxer == null) {
+    private void waitForStart(){
+        if (MediaStorageManager.getInstance().isReady()) {
+            if(mMuxer == null){
                 return;
             }
-            if (!mMuxer.startMediaMuxer()) {
+            if(!mMuxer.startMediaMuxer()){
                 mHandler.sendEmptyMessageDelayed(WAIT_TO_START, 1000);
             } else {
                 mHandler.sendEmptyMessageDelayed(STOP_RECORD, 5 * 60 * 1000);
             }
         }
-
     }
 
-    private void stopRecord() {
-        Log.d(TAG, " stopRecord ");
-        if (mMuxer != null) {
+    private void stopRecord(){
+        Log.d(TAG ," stopRecord ");
+        if(mMuxer!= null){
             mMuxer.stopMediaMuxer();
             mMuxer = null;
         }
 
-        if (!mSDCardBussiness.isSDCardAvailable()) {
-            Log.d(TAG, "SD card has removed ");
+        if(!MediaStorageManager.getInstance().isReady()){
+            Log.d(TAG,"MediaStorageManager hasn't ready");
             return;
         }
-        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
+/*        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
             @Override
             public void onScanCompleted(String path, Uri uri) {
-                Log.d(TAG, "onScanCompleted path = " + path + " uri = " + uri);
+                Log.d(TAG,"onScanCompleted path = " + path + " uri = " + uri);
             }
-        });
+        });*/
         mHandler.sendEmptyMessageDelayed(START_RECORD, 3000);
     }
 
 
-    private void deleteEarlyestFileIfNeed() {
-
-        if (mSDCardBussiness.isSDCardAvailable()) {
-            long tmpAvailableSpace = mSDCardBussiness.getAvailableSpace();
-            Log.d(TAG, "SDCard AvailableSpace = " + tmpAvailableSpace);
-            if (tmpAvailableSpace <= SD_MEM_THRESHOLD) {
-                deleteEarlyestFromFloder(VIDEO_ROOT_PATH);
-                mHandler.sendEmptyMessageDelayed(CHECK_STORAGE, 30 * 1000);
-            }
-        }
-    }
-
-    private boolean deleteEarlyestFromFloder(String path) {
-        boolean success = false;
-        try {
-            ArrayList<File> videos = new ArrayList<File>();
-            if (getFiles(videos, path, ".mp4") > 0) {
-                File earlyestSavedVideo = videos.get(0);
-                if (earlyestSavedVideo.exists()) {
-                    for (int i = 1; i < videos.size(); i++) {
-                        File nextFile = videos.get(i);
-                        if (nextFile.lastModified() < earlyestSavedVideo.lastModified()) {
-                            earlyestSavedVideo = nextFile;
-                        }
-                    }
-
-                    Log.d(TAG, "earlyest video = " + earlyestSavedVideo.getAbsolutePath());
-                    success = earlyestSavedVideo.delete();
-                }
-            }
-        } catch (Exception e) {
-            Log.d(TAG, "deleteEarlyestFromFloder exception " + e.toString());
-            e.printStackTrace();
-        }
-        return success;
-    }
-
-    private int getFiles(ArrayList<File> fileList, String path, String aExtension) {
-        File[] allFiles = new File(path).listFiles();
-        if (null != allFiles) {
-            for (File file : allFiles) {
-                if (file.isFile()) {
-                    if (file.getName().endsWith(aExtension))
-                        fileList.add(file);
-                } else if (!file.getAbsolutePath().contains(".thumnail")) {
-                    getFiles(fileList, file.getAbsolutePath(), aExtension);
-                }
-            }
-            if (null != fileList && fileList.size() > 0) {
-                return fileList.size();
-            }
-            return 0;
-        } else {
-            return 0;
-        }
-    }
-
-    public static boolean AlertRecordRunning = false;
 
     public void startAlertRecord() {
-        if (!mIsMonitor) {
-            Log.d("qxj", "this AvMediaRecorder status is ---" + mIsMonitor);
+        Log.d(TAG ,"startRecord");
+        if(!MediaStorageManager.getInstance().isReady()){
+            Log.d(TAG,"MediaStorageManager hasn't ready");
             return;
         }
         Log.d("qxj", "startAlertRecord---");
-        alertMuxer = new AlertMediaMuxer();
-        AlertRecordRunning = true;
+        alertMuxer = AlertMediaMuxer.getInstance();
         waitAlertForStart();
     }
 
     private void stopAlertRecord() {
-        Log.d("qxj", " stopRecord ");
+        Log.d("qxj", " stopAlertRecord ");
         if (alertMuxer != null) {
             alertMuxer.stopMediaMuxer();
             alertMuxer = null;
         }
-
-        if (!mSDCardBussiness.isSDCardAvailable()) {
-            Log.d(TAG, "SD card has removed ");
-            return;
-        }
-        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
-            @Override
-            public void onScanCompleted(String path, Uri uri) {
-                Log.d(TAG, "onScanCompleted path = " + path + " uri = " + uri);
-            }
-        });
-
     }
 
     private Handler handler;
     private Runnable runnable;
 
     private void waitAlertForStart() {
+        if (MediaStorageManager.getInstance().isReady()) {
 
-        long tmpAvailableSpace = mSDCardBussiness.getAvailableSpace();
-        if (tmpAvailableSpace < SD_MEM_THRESHOLD) {
-            Log.d("qxj", "AvailableSpace < 300M");
-            deleteEarlyestFileIfNeed();
-        }
-
-        if (alertMuxer == null) {
-            return;
-        }
-        if (!alertMuxer.startMediaMuxer()) {
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    waitAlertForStart();
-                }
-            }, 500);
-        } else {
-            handler = new Handler();
-            runnable = new Runnable() {
-                @Override
-                public void run() {
-                    stopAlertRecord();
-                    AlertMediaMuxer.saveBitmap(AlertMediaMuxer.getBitmap());
-                }
-            };
-            handler.postDelayed(runnable, 30 * 1000);
+            if (alertMuxer == null) {
+                return;
+            }
+            if (!alertMuxer.startMediaMuxer()) {
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        waitAlertForStart();
+                    }
+                }, 500);
+            } else {
+                handler = new Handler();
+                runnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        stopAlertRecord();
+                    }
+                };
+                handler.postDelayed(runnable, 30 * 1000);
+            }
         }
 
     }

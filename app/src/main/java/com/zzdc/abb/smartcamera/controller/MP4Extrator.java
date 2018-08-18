@@ -41,7 +41,7 @@ public class MP4Extrator {
                 (byte)0x80, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01,
                 (byte)0x68, (byte)0xCE, (byte)0x06, (byte)0xE2};
 
-    MP4Extrator(String aFilePath, long aDestTime, long aVideoStartTime){
+    public MP4Extrator(String aFilePath, long aDestTime, long aVideoStartTime){
         mDestFilePath = aFilePath;
         mDestTime = aDestTime;
         mVideoStartTime = aVideoStartTime;

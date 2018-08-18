@@ -55,28 +55,26 @@ public class Utils {
             public void run() {
                 Log.d(TAG, "开始人脸提取");
                 //提取人脸数据
-                Utils.startToSaveFeature(name, Utils.getFaceImagePath());
+//                Utils.startToSaveFeature(name, Utils.getFaceImagePath());
             }
         }).start();
     }
 
     private static void startToSaveFeature(String name, String path) {
         Log.d(TAG, "进入人脸提取");
-        FeatureExtractManager feature = new FeatureExtractManager(name, path);
-        ArrayList<FaceDatabase> faceData =  feature.getFRToExtractFeature();
+        FeatureContrastManager feature = FeatureContrastManager.getInstance();
+        feature.setSwitchContrast(true);
+        ArrayList<FaceDatabase> faceData =  feature.getFRToExtractFeature(name, path);
         if (faceData == null || faceData.size() == 0) {
             return;
         }
-        for (int i = 0; i < faceData.size(); i++) {
-            Log.d(TAG, "识别到 name - " + name + " 的人脸数据" + i);
-            saveOrUpdateFaceData(name, faceData.get(i).direction, faceData.get(i).face);
 
+        FeatureContrastManager features = FeatureContrastManager.getInstance();
+        features.addFamilyFaceFeature(faceData);
+        for (int i = 0; i < faceData.size(); i++) {
+            Log.d(TAG, "识别到 name - " + faceData.get(i).name + " 的人脸数据" + i);
+            saveOrUpdateFaceData(name, faceData.get(i).direction, faceData.get(i).face);
             Log.d(TAG, "添加 " + name + " 的人脸数据 到视频识别队列中");
-            FaceDatabase faceDatabase = new FaceDatabase();
-            faceDatabase.face = faceData.get(i).face;
-            faceDatabase.name = name;
-            FeatureContrastManager features = FeatureContrastManager.getInstance();
-            features.addFamilyFaceFeature(faceDatabase);
         }
         Log.d(TAG, "完成识别 " + name + " 的人脸数据");
     }
@@ -103,11 +101,11 @@ public class Utils {
      * @param name
      */
     public void deleteFaceData(String name) {
-        FaceDatabase faceDatabase = SQLite.select()
+        List<FaceDatabase> faceDatabases = SQLite.select()
                 .from(FaceDatabase.class)
                 .where(FaceDatabase_Table.name.eq(name))
-                .querySingle();
-        if (faceDatabase != null) {
+                .queryList();
+        if (faceDatabases != null && faceDatabases.size() > 0) {
             SQLite.delete()
                     .from(FaceDatabase.class)
                     .where(FaceDatabase_Table.name.eq(name))
@@ -121,11 +119,11 @@ public class Utils {
      * @param name
      */
     public void deleteFocusFaceData(String name) {
-        FaceDatabase faceDatabase = SQLite.select()
+        List<FaceDatabase> faceDatabases = SQLite.select()
                 .from(FaceDatabase.class)
                 .where(FaceDatabase_Table.name.eq(name))
-                .querySingle();
-        if (faceDatabase != null) {
+                .queryList();
+        if (faceDatabases != null && faceDatabases.size() > 0) {
             SQLite.update(FaceDatabase.class)
                     .set(FaceDatabase_Table.focus.is(false))
                     .where(FaceDatabase_Table.name.eq(name))
@@ -215,6 +213,15 @@ public class Utils {
         SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");// HH:mm:ss
         // 获取当前时间
         Date date = new Date(System.currentTimeMillis());
+        String time = simpleDateFormat.format(date);
+        return time;
+    }
+    public static String timeNow(long times) {
+        //时间System.currentTimeMillis()
+        @SuppressLint("SimpleDateFormat")
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");// HH:mm:ss
+        // 获取当前时间
+        Date date = new Date(times);
         String time = simpleDateFormat.format(date);
         return time;
     }

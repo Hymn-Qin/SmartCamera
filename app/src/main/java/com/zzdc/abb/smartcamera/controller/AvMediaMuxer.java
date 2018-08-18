@@ -4,7 +4,6 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.util.Log;
-import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import java.io.File;
@@ -77,7 +76,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
             LogTool.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
             return false;
         } else {
-            String tmpMediaFile = generateVideoFileName();
+            String tmpMediaFile = MediaStorageManager.getInstance().generateHistoryMediaFileName();
             try {
                 LogTool.d(TAG, "Create MediaMuxer start");
                 mMediaMuxer = new MediaMuxer(tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
@@ -172,36 +171,6 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
     public void onVideoFormatChanged(MediaFormat format) {
         LogTool.d(TAG, "Video format changed. " + format);
         VIDEO_FORMAT = format;
-    }
-
-    private String generateVideoFileName(){
-        String tmpPath ="";
-        long tmpTime = System.currentTimeMillis();
-        String title = createName(tmpTime);
-        String tmpFileName = title + ".mp4";
-        SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
-        if (tmpBussiness.isSDCardAvailable()){
-            //SD卡 DCIM目录
-            String tmpDir = tmpBussiness.getSDCardVideoRootPath() + "/" + "DCIM";
-            File mkDir = new File(tmpBussiness.getSDCardVideoRootPath(), "DCIM");
-            if (!mkDir.exists())
-            {
-                mkDir.mkdirs();   //目录不存在，则创建
-            }
-            tmpPath = tmpDir + '/' + tmpFileName;
-            LogTool.d(TAG, "tmpPath " + tmpPath);
-        } else {
-            Log.d(TAG,"sd卡不存在");
-//            tmpPath = Constant.DIRCTORY + '/' + tmpFileName;
-        }
-
-        return tmpPath ;
-    }
-
-    private String createName(long aDate){
-        Date tmpDate = new Date(aDate);
-        SimpleDateFormat tmpDateFormat = new SimpleDateFormat("'VID'_yyyyMMdd_HHmmss");
-        return  tmpDateFormat.format(tmpDate);
     }
 
 }

@@ -1,6 +1,9 @@
 package com.zzdc.abb.smartcamera.controller;
 
 import android.graphics.Bitmap;
+import android.graphics.ImageFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
@@ -8,12 +11,17 @@ import android.media.MediaMuxer;
 import android.os.Environment;
 import android.util.Log;
 
+import com.raizlabs.android.dbflow.sql.language.SQLite;
+import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData;
+import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData_Table;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
+import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -40,27 +48,47 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
     private long mLastVideoFrameTimestamp = 0;
     private boolean isPPSAdded = false;
 
-    private Thread mWorkThread = new Thread("MediaMuxer-thread") {
+    private static String start;
+    private static String end;
+
+    public static boolean AlertRecordRunning = false;
+    private static String fileTitle; //保存视频和图片名字
+    private static long startTime; //开始录制时间
+    private static String tmpMediaFilePath; //保存视频路径
+    private static String imagePath; //保存视频路径
+
+    private static boolean startImage = false;
+
+    private AlertMediaMuxer() {}
+    private static class AlertMediaMuxerHolder {
+        private static final AlertMediaMuxer INSTANCE = new AlertMediaMuxer();
+    }
+    public static final AlertMediaMuxer getInstance() {
+        return AlertMediaMuxerHolder.INSTANCE;
+    }
+
+
+    private Thread mWorkThread = new Thread("AlertMediaMuxer-thread") {
         @Override
         public void run() {
-            LogTool.d(TAG, "Media muxer thread start.");
+            Log.d(TAG, "AlertMediaMuxer thread start.");
             mMediaMuxer.start();
             while (mMuxering) {
                 EncoderBuffer data = null;
                 try {
-                    if (mMuxerDatas == null) {
-                        continue;
-                    }
                     data = mMuxerDatas.take();
                     if (data.getTrack() == TRACK_VIDEO) {
                         mMediaMuxer.writeSampleData(mVideoTrackIndex, data.getByteBuffer(), data.getBufferInfo());
+                        if (startImage) {
+                            createImage(imagePath, data.getByteBuffer().array());
+                        }
                     } else if (data.getTrack() == TRACK_AUDIO) {
                         mMediaMuxer.writeSampleData(mAudioTrackIndex, data.getByteBuffer(), data.getBufferInfo());
                     } else {
-                        LogTool.w(TAG, "Find unknow track. " + data.getTrack());
+                        Log.w(TAG, "Find unknow track. " + data.getTrack());
                     }
                 } catch (Exception e) {
-                    LogTool.w(TAG, "Mux video an audio with exception, ", e);
+                    Log.w(TAG, "Mux video an audio with exception, ", e);
                 } finally {
                     if (data != null) {
                         data.decreaseRef();
@@ -72,9 +100,9 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
                 mMediaMuxer.release();
 
             } catch (Exception e) {
-                LogTool.e(TAG,"Stop MediaMuxer failed!!! : ",e);
+                Log.e(TAG,"Stop MediaMuxer failed!!! : ",e);
             }
-            LogTool.d(TAG, "Media muxer thread stop.");
+            Log.d(TAG, "AlertMediaMuxer muxer thread stop.");
         }
     };
 
@@ -86,15 +114,17 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
         }
 
         if ((AUDIO_FORMAT == null || VIDEO_FORMAT ==  null)){
-            LogTool.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
+            Log.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
             return false;
         } else {
-            FaceConfig.tmpMediaFile = generateVideoFileName();
+            tmpMediaFilePath = generateVideoFileName();
+            imagePath = getImagePath();
+            startImage = true;
             try {
-                LogTool.d(TAG, "Create MediaMuxer start");
-                mMediaMuxer = new MediaMuxer(FaceConfig.tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                Log.d(TAG, "Create AlertMediaMuxer start");
+                mMediaMuxer = new MediaMuxer(tmpMediaFilePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             }catch (Exception e){
-                LogTool.e(TAG, "Create MediaMuxer with exception, ", e);
+                Log.e(TAG, "Create AlertMediaMuxer with exception, ", e);
                 return false;
             }
         }
@@ -107,22 +137,28 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
         VideoEncoder.getInstance().registerEncoderListener(this);
         mMuxering = true;
         mWorkThread.start();
+        AlertRecordRunning = true;
         return true;
     }
 
     public void stopMediaMuxer() {
-        LogTool.d(TAG, "Stop media muxer");
+        end = Utils.timeNow();
+        Log.d(TAG, "Stop media AlertMediaMuxer");
         mMuxering = false;
-//        if (mWorkThread != null) {
-//            mWorkThread.interrupt();
-//        }
+        if (mWorkThread != null) {
+            mWorkThread.interrupt();
+        }
+        saveStartEndTime(start, end, tmpMediaFilePath);
+
+        saveImagePath(tmpMediaFilePath, imagePath);
         AudioEncoder.getInstance().unRegisterEncoderListener(this);
         VideoEncoder.getInstance().unRegisterEncoderListener(this);
+        AlertRecordRunning = false;
     }
 
     @Override
     public void onAudioEncoded(EncoderBuffer buf) {
-        if (!mMuxering)
+        if(!mMuxering)
             return;
 
         ByteBuffer bufferSrc = buf.getByteBuffer();
@@ -144,7 +180,7 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
 
     @Override
     public void onAudioFormatChanged(MediaFormat format) {
-        LogTool.d(TAG, "Audio format changed. " + format);
+        Log.d(TAG, "Audio format changed. " + format);
         AUDIO_FORMAT = format;
     }
 
@@ -182,15 +218,16 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
 
     @Override
     public void onVideoFormatChanged(MediaFormat format) {
-        LogTool.d(TAG, "Video format changed. " + format);
+        Log.d(TAG, "Video format changed. " + format);
         VIDEO_FORMAT = format;
     }
 
     private String generateVideoFileName() {
         String tmpPath = "";
-        FaceConfig.tmpTime = System.currentTimeMillis();
-        FaceConfig.title = createName(FaceConfig.tmpTime);
-        FaceConfig.tmpFileName = FaceConfig.title + ".mp4";
+        startTime = System.currentTimeMillis();
+        fileTitle = createName(startTime);
+        start = Utils.timeNow(startTime);
+        String tmpFileName = fileTitle + ".mp4";
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {
             //SD卡 DCIM目录
@@ -199,8 +236,27 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             if (!mkDir.exists()) {
                 mkDir.mkdirs();   //目录不存在，则创建
             }
-            tmpPath = tmpDir + '/' + FaceConfig.tmpFileName;
-            LogTool.d(TAG, "tmpPath " + tmpPath);
+            tmpPath = tmpDir + '/' + tmpFileName;
+            Log.d(TAG, "tmpPath " + tmpPath);
+        } else {
+            Log.d(TAG, "sd卡不存在");
+        }
+
+        return tmpPath;
+    }
+    private String getImagePath () {
+        String tmpPath = "";
+        String tmpFileName = fileTitle + ".jpg";
+        SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
+        if (tmpBussiness.isSDCardAvailable()) {
+            //SD卡 DCIM目录
+            String tmpDir = tmpBussiness.getSDCardVideoRootPath() + "/" + "ALERT";
+            File mkDir = new File(tmpBussiness.getSDCardVideoRootPath(), "ALERT");
+            if (!mkDir.exists()) {
+                mkDir.mkdirs();   //目录不存在，则创建
+            }
+            tmpPath = tmpDir + '/' + tmpFileName;
+            Log.d(TAG, "tmpPath " + tmpPath);
         } else {
             Log.d(TAG, "sd卡不存在");
 //            tmpPath = Constant.DIRCTORY + '/' + tmpFileName;
@@ -219,16 +275,16 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
      * 提取第一帧图片
      * @return 返回图片
      */
-    public static Bitmap getBitmap() {
-        Log.d("qxj", " 开始生成第一帧图片 " + FaceConfig.tmpMediaFile);
+    private static Bitmap getBitmap(long start, String filePath) {
+        Log.d(TAG, " 开始生成第一帧图片 " + filePath);
         MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
-        metadataRetriever.setDataSource(FaceConfig.tmpMediaFile);
+        metadataRetriever.setDataSource(filePath);
         String w = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
         String h = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
         metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
 
         Bitmap bitmap = null;
-        for (long i = FaceConfig.tmpTime; i < 30000; i += 1000) {
+        for (long i = start; i < 30000; i += 1000) {
             bitmap = metadataRetriever.getFrameAtTime(i * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if (bitmap != null) {
                 break;
@@ -239,15 +295,29 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
         return bitmap;
     }
 
+    private void createImage(String imagePath, byte[] data) {
+        try {
+            startImage = false;
+            File file = new File(imagePath);
+            FileOutputStream outputStream = new FileOutputStream(file);
+
+            YuvImage image = new YuvImage(data, ImageFormat.NV21, 1080, 960, null);
+            image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+    }
+
     /**
      * 把第一帧保存成图片 在SD卡中
      * @param bitmap
      */
-    public static void saveBitmap(Bitmap bitmap) {
-        Log.d("qxj", " 开始保存第一帧图片 ");
+    private String saveBitmap(String name, Bitmap bitmap) {
+        Log.d(TAG, " 开始保存第一帧图片 ");
         if (bitmap == null) {
-            Log.d("qxj", " 保存第一帧图片失败 bitmap 为空");
-            return;
+            Log.d(TAG, " 保存第一帧图片失败 bitmap 为空");
+            return null;
         }
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {
@@ -259,9 +329,9 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
             }
 
             try {
-                FaceConfig.imagePath = tmpBussiness.getSDCardVideoRootPath() + "/" + "ALERT" + "/" + FaceConfig.title + ".jpg";
-                Log.d("qxj", " 保存第一帧图片 name -- " + FaceConfig.imagePath);
-                File file = new File(FaceConfig.imagePath);
+                String imagePath = tmpBussiness.getSDCardVideoRootPath() + "/" + "ALERT" + "/" + name + ".jpg";
+                Log.d(TAG, " 保存第一帧图片 name -- " + imagePath);
+                File file = new File(imagePath);
                 if (!file.exists()) {
                     file.getParentFile().mkdirs();
                     file.createNewFile();
@@ -271,10 +341,46 @@ public class AlertMediaMuxer implements AudioEncoder.AudioEncoderListener, Video
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
                 fos.flush();
                 fos.close();
-
+                return imagePath;
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+        return null;
+    }
+
+    private void saveStartEndTime(String start, String end, String filePath) {
+        AlertVideoData videoData = SQLite.select().from(AlertVideoData.class)
+                .where(AlertVideoData_Table.start.eq(start))
+                .querySingle();
+        if (videoData != null) {
+            SQLite.update(AlertVideoData.class)
+                    .set(AlertVideoData_Table.start.eq(start), AlertVideoData_Table.end.eq(end), AlertVideoData_Table.filePath.eq(filePath))
+                    .where(AlertVideoData_Table.id.is(videoData.id))
+                    .execute();
+        } else {
+            AlertVideoData alertVideoData = new AlertVideoData();
+            alertVideoData.start = start;
+            alertVideoData.end = end;
+            alertVideoData.filePath = filePath;
+            alertVideoData.save();
+        }
+    }
+
+    private void saveImagePath(String filePath, String imagePath) {
+        AlertVideoData videoData = SQLite.select().from(AlertVideoData.class)
+                .where(AlertVideoData_Table.filePath.eq(filePath))
+                .querySingle();
+        if (videoData != null) {
+            SQLite.update(AlertVideoData.class)
+                    .set(AlertVideoData_Table.imagePath.eq(imagePath))
+                    .where(AlertVideoData_Table.id.is(videoData.id))
+                    .execute();
+        } else {
+            AlertVideoData alertVideoData = new AlertVideoData();
+            alertVideoData.imagePath = imagePath;
+            alertVideoData.filePath = filePath;
+            alertVideoData.save();
         }
     }
 

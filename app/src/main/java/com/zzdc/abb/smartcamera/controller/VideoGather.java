@@ -293,9 +293,9 @@ public class VideoGather {
             if(data != null){
                 debug("onPreviewFrame: mVideoRawDataListeners size = "+mVideoRawDataListeners.size());
                 if (data == mVideoRawBuf.getData()) {
-                    //添加人脸识别
-                    FeatureContrastManager featureContrastManager = FeatureContrastManager.getInstance();
-                    featureContrastManager.startContrastFeature(data, preWidth, preHeight);
+//                    //添加人脸识别
+//                    FeatureContrastManager featureContrastManager = FeatureContrastManager.getInstance();
+//                    featureContrastManager.startContrastFeature(data, preWidth, preHeight);
 
                     for (VideoRawDataListener listener: mVideoRawDataListeners) {
                         listener.onVideoRawDataReady(mVideoRawBuf);

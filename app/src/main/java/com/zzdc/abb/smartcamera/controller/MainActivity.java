@@ -36,6 +36,7 @@ import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.Device;
 import com.zzdc.abb.smartcamera.util.LogTool;
+import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 import com.zzdc.abb.smartcamera.util.TUTKUIDUtil;
 import com.zzdc.abb.smartcamera.util.WindowUtils;
 

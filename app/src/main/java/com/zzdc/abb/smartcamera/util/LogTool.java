@@ -130,14 +130,14 @@ public class LogTool {
         return sb.toString();
     }
 
-    private static ThreadLocal<SimpleDateFormat> mLocalFormat = new ThreadLocal<SimpleDateFormat>() {
+    private static final ThreadLocal<SimpleDateFormat> FORMAT = new ThreadLocal<SimpleDateFormat>() {
         @Override
         protected SimpleDateFormat initialValue() {
             return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
         }
     };
     private static void logToFile(String logType, String tag, String text, Throwable tr) {
-        String log = mLocalFormat.get().format(new Date()) + "\t"
+        String log = FORMAT.get().format(new Date()) + "\t"
                 + logType + "/" + tag + "\t"
                 + text + "\n"
                 + Log.getStackTraceString(tr);

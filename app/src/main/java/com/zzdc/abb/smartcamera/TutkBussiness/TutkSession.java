@@ -279,12 +279,12 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
             Log.d(TAG, getName() + " start");
             byte[] frameInfo = new byte[FRAME_INFO_SIZE];
             byte[] audioBuffer = new byte[AUDIO_BUF_SIZE];
-            while (ReceiveAudioRuning && !interrupted()) {
+            while (ReceiveAudioRuning) {
                 int tmpRet = AVAPIs.avCheckAudioBuf(mAudioRecChannelID);
                 LogTool.d(TAG, "Receive voice fram count = " + tmpRet);
                 System.out.println("tmpRet = " + tmpRet);
 
-                if (tmpRet < 3) {
+                if (tmpRet < 2) {
                     try {
                         sleep(50);
                         continue;
@@ -303,9 +303,25 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
                     }
                 } else if (ret == AVAPIs.AV_ER_LOSED_THIS_FRAME) {
                     LogTool.w(TAG, getName() + "Receive remote voice losed frame");
+                    continue;
+                } else if(ret == AVAPIs.AV_ER_INCOMPLETE_FRAME){
+                    LogTool.w(TAG, "Incomplete video frame number threadName=" + Thread.currentThread().getName() + ",frameNumber[0]=" + frameNumber[0]);
+                    continue;
+                } else if (ret == AVAPIs.AV_ER_SESSION_CLOSE_BY_REMOTE) {
+                    LogTool.w(TAG, "AV_ER_SESSION_CLOSE_BY_REMOTE threadName=" + Thread.currentThread().getName());
+                    break;
+                } else if (ret == AVAPIs.AV_ER_REMOTE_TIMEOUT_DISCONNECT) {
+                    LogTool.w(TAG, "AV_ER_REMOTE_TIMEOUT_DISCONNECT threadName=" + Thread.currentThread().getName());
+                    break;
+                } else if (ret == AVAPIs.AV_ER_INVALID_SID) {
+                    LogTool.w(TAG, "Session cant be used anymore threadName=" + Thread.currentThread().getName());
+                    break;
+                } else if(ret == AVAPIs.AV_ER_DATA_NOREADY){
+                    LogTool.w(TAG, "The data is not ready for receiving threadName=" + Thread.currentThread().getName());
+                    continue;
                 } else {
                     LogTool.w(TAG, getName() + "Receive remote voice failed, Error code = " + ret);
-                    break;
+                    continue;
                 }
             }
         }

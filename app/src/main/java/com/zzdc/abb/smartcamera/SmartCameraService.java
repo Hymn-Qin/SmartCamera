@@ -11,7 +11,9 @@ import android.os.IBinder;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
+import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
+import com.zzdc.abb.smartcamera.controller.AlertMediaMuxer;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
 import com.zzdc.abb.smartcamera.controller.MainActivity;
 
@@ -73,13 +75,19 @@ public class SmartCameraService extends Service {
                 String type = intent.getStringExtra("type");
                 String message = intent.getStringExtra("message");
                 Log.d(TAG, "get receive -- type = " + type + " message = " + message);
-//                if (type.equals("ALERT")) {
-//                    if (!AvMediaRecorder.AlertRecordRunning) {
-//                        mAvMediaRecorder.startAlertRecord();
-//                    } else {
-//                        mAvMediaRecorder.resetStopTime(0);
-//                    }
-//                } else
+                if (type.equals("ALERT")) {
+                    if (mApplicationSetting.getSystemMonitorOKSetting()) {
+                        if (!AlertMediaMuxer.AlertRecordRunning) {
+                            Log.d(TAG, "警告视频开始");
+                            AlertMediaMuxer.AlertRecordRunning = true;
+                            mAvMediaRecorder.startAlertRecord();
+                        } else {
+                            Log.d(TAG, "警告视频已经开始 延长录制时间");
+                            mAvMediaRecorder.resetStopTime(0);
+                        }
+                    }
+
+                } else
                     if (type.equals("Camera")) {
 
                     if (MainActivity.mainActivity == null) {
