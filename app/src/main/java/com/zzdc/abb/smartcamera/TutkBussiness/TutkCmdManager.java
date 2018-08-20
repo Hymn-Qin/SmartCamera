@@ -12,11 +12,15 @@ import com.ptz.PTZControl.PTZControlCallBackContainer;
 import com.ptz.PTZControl.PTZControlManager;
 import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
+import com.raizlabs.android.dbflow.sql.language.SQLite;
 import com.tutk.IOTC.AVIOCTRLDEFs;
+import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData;
+import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData_Table;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceFromClient;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.AACDecoder;
+import com.zzdc.abb.smartcamera.controller.AlertMediaMuxer;
 import com.zzdc.abb.smartcamera.controller.AudioEncoder;
 import com.zzdc.abb.smartcamera.controller.AudioGather;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
@@ -42,7 +46,9 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class TutkCmdManager {
     private static final String TAG = TutkCmdManager.class.getSimpleName();
@@ -61,7 +67,7 @@ public class TutkCmdManager {
     private static final int STATUS_WARNING_TRANSFER = 3;
     private int mTransmissionStatus = STATUS_IDEL;
 
-    private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = new ThreadLocal<SimpleDateFormat>(){
+    private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = new ThreadLocal<SimpleDateFormat>() {
         @Override
         protected SimpleDateFormat initialValue() {
             return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -309,7 +315,7 @@ public class TutkCmdManager {
         mAvMediaRecorder.avMediaRecorderStart();
     }
 
-    private void handleStopMonitor(){
+    private void handleStopMonitor() {
         LogTool.d(TAG, "Handle " + STOP_MONITOR);
         mAplicationSetting = ApplicationSetting.getInstance();
         mAplicationSetting.setSystemMonitorSetting(false);
@@ -360,9 +366,9 @@ public class TutkCmdManager {
         try {
             String stringTime = jObj.getString("time");
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " time: " + stringTime);
-            long longTime = TIME_FORMAT.get().parse(stringTime).getTime()/1000;
+            long longTime = TIME_FORMAT.get().parse(stringTime).getTime() / 1000;
             String file = MediaStorageManager.getInstance().getHistoryFile(longTime);
-            if ( file == null) {
+            if (file == null) {
                 JSONObject j = new JSONObject();
                 j.put("ret", "-1");
                 j.put("desc", "File not exist");
@@ -376,7 +382,7 @@ public class TutkCmdManager {
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
                     AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
-                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER){
+                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
@@ -445,53 +451,30 @@ public class TutkCmdManager {
     }
 
     private void handleGetAlertInfo() {
-        try {
-            LogTool.d(TAG, "Handle " + GET_HISTORY_INFORMATION);
-            List<MediaDurationInfo> infos = MediaStorageManager.getInstance().getHistoryDurationInfo();
-            if (infos == null || infos.size() == 0) {
-                LogTool.w(TAG, "No history duration info");
-                JSONObject jObj = new JSONObject();
-                jObj.put("type", GET_HISTORY_INFORMATION);
-                jObj.put("ret", "-1");
-                mTutkSession.writeMessge(jObj.toString());
-            } else {
-                JSONArray blkQuantum = new JSONArray();
-                for (int i = 0; i < infos.size(); i++) {
-                    MediaDurationInfo info = infos.get(i);
-                    String start = TIME_FORMAT.get().format(new Date(info.getStart() * 1000));
-                    String end = TIME_FORMAT.get().format(new Date(info.getEnd() * 1000));
-                    JSONObject quantum = new JSONObject();
-                    quantum.put("mStart", start);
-                    quantum.put("mEnd", end);
-                    blkQuantum.put(quantum);
-                }
-                JSONObject jObj = new JSONObject();
-                jObj.put("type", GET_HISTORY_INFORMATION);
-                jObj.put("ret", "0");
-                jObj.put("DateArray", blkQuantum);
-                mTutkSession.writeMessge(jObj.toString());
 
-                JSONObject jObjEnd = new JSONObject();
-                jObjEnd.put("type", GET_HISTORY_INFORMATION);
-                jObjEnd.put("ret", "1");
-                mTutkSession.writeMessge(jObjEnd.toString());
-            }
-        } catch (JSONException e) {
-            LogTool.w(TAG, "Handle " + GET_HISTORY_INFORMATION + " with exception, ", e);
+        Log.d(TAG, "Handle " + GET_ALERT_INFORMATION);
+        List<AlertVideoData> alertVideoDataList = SQLite.select().from(AlertVideoData.class).queryList();
+        Map<String, Object> map = new HashMap<>();
+        map.put("type", GET_ALERT_INFORMATION);
+        if (alertVideoDataList.size() == 0) {
+            map.put("ret", "-1");
+        } else {
+            map.put("ret", "0");
+            map.put("DateArray", alertVideoDataList);
         }
+        mTutkSession.writeMessge(new Gson().toJson(map));
     }
+
     private void handleSetAlertFile(JSONObject jObj) {
         try {
             String stringTime = jObj.getString("time");
             LogTool.w(TAG, "Handle " + SET_ALERT_FILE + " time: " + stringTime);
-            long longTime = TIME_FORMAT.get().parse(stringTime).getTime()/1000;
-            String file = MediaStorageManager.getInstance().getHistoryFile(longTime);
-            if ( file == null) {
-                JSONObject j = new JSONObject();
-                j.put("ret", "-1");
-                j.put("desc", "File not exist");
-                mTutkSession.writeMessge(j.toString());
-            } else {
+            long longTime = TIME_FORMAT.get().parse(stringTime).getTime() / 1000;
+            AlertVideoData alertVideoData = SQLite.select().from(AlertVideoData.class)
+                    .where(AlertVideoData_Table.startTime.lessThanOrEq(longTime),
+                            AlertVideoData_Table.endTime.greaterThanOrEq(longTime))
+                    .querySingle();
+            if (alertVideoData != null) {
                 JSONObject j = new JSONObject();
                 j.put("ret", "0");
                 j.put("desc", " ");
@@ -500,18 +483,22 @@ public class TutkCmdManager {
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
                     AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
-                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER){
+                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
                     }
                 }
-                long videoStartTime = MediaStorageManager.getHistoryMediaStartTime(file);
-                mExtractor = new MP4Extrator(file, longTime, videoStartTime);
+                mExtractor = new MP4Extrator(alertVideoData.filePath, longTime, alertVideoData.startTime);
                 mExtractor.registerExtratorListener(mMediaTransfer);
                 mExtractor.init();
                 mExtractor.start();
                 mTransmissionStatus = STATUS_HISTORY_TRANSFER;
+            } else  {
+                JSONObject j = new JSONObject();
+                j.put("ret", "-1");
+                j.put("desc", "File not exist");
+                mTutkSession.writeMessge(j.toString());
             }
         } catch (JSONException | ParseException e) {
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " with exception, ", e);

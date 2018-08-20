@@ -14,7 +14,11 @@ public class AlertVideoData extends BaseModel {
     @Column
     public String start;
     @Column
+    public long startTime;
+    @Column
     public String end;
+    @Column
+    public long endTime;
     @Column
     public String filePath;
     @Column

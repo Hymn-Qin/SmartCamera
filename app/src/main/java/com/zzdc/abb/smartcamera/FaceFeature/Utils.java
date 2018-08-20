@@ -55,16 +55,19 @@ public class Utils {
             public void run() {
                 Log.d(TAG, "开始人脸提取");
                 //提取人脸数据
-//                Utils.startToSaveFeature(name, Utils.getFaceImagePath());
+                Utils.startToSaveFeature(name, Utils.getFaceImagePath());
             }
         }).start();
     }
 
     private static void startToSaveFeature(String name, String path) {
         Log.d(TAG, "进入人脸提取");
+        if (path == null) {
+            return;
+        }
         FeatureContrastManager feature = FeatureContrastManager.getInstance();
         feature.setSwitchContrast(true);
-        ArrayList<FaceDatabase> faceData =  feature.getFRToExtractFeature(name, path);
+        ArrayList<FaceDatabase> faceData = feature.getFRToExtractFeature(name, path);
         if (faceData == null || faceData.size() == 0) {
             return;
         }
@@ -78,6 +81,7 @@ public class Utils {
         }
         Log.d(TAG, "完成识别 " + name + " 的人脸数据");
     }
+
     /**
      * 设置重点关注
      *
@@ -162,34 +166,10 @@ public class Utils {
         return faceDatabaseList;
     }
 
-    /**
-     * 创建图片保存路径
-     *
-     * @return
-     */
-    public static String getFaceImagePath() {
-        String tmpPath = "";
-        SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
-        if (tmpBussiness.isSDCardAvailable()) {
-            //SD卡 DCIM目录
-            String tmpDir = tmpBussiness.getSDCardVideoRootPath() + "/" + facePath;
-            File mkDir = new File(tmpBussiness.getSDCardVideoRootPath(), facePath);
-            if (!mkDir.exists()) {
-                mkDir.mkdirs();   //目录不存在，则创建
-            }
-            tmpPath = tmpDir;
-            LogTool.d(TAG, "tmpPath " + tmpPath);
-        } else {
-            Log.d(TAG, "sd卡不存在");
-        }
-        return tmpPath;
-    }
-
     public static File getFacePictureFile(String fileName) {
-        SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
-        if (tmpBussiness.isSDCardAvailable()) {
-            //SD卡 DCIM目录
-            String tmpDir = getFaceImagePath();
+        //SD卡 DCIM目录
+        String tmpDir = getFaceImagePath();
+        if (tmpDir != null) {
             // TODO
             try {
                 String imagePath = fileName + ".jpg";
@@ -206,6 +186,33 @@ public class Utils {
         return null;
     }
 
+    /**
+     * 创建图片保存路径
+     *
+     * @return
+     */
+    private static String getFaceImagePath() {
+        return getSDPath(facePath);
+    }
+
+    public static String getSDPath(String path) {
+        String tmpPath = null;
+        SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
+        if (tmpBussiness.isSDCardAvailable()) {
+            //SD卡 DCIM目录
+            String tmpDir = tmpBussiness.getSDCardVideoRootPath() + "/" + path;
+            File mkDir = new File(tmpBussiness.getSDCardVideoRootPath(), path);
+            if (!mkDir.exists()) {
+                mkDir.mkdirs();   //目录不存在，则创建
+            }
+            tmpPath = tmpDir;
+            LogTool.d(TAG, "tmpPath " + tmpPath);
+        } else {
+            Log.d(TAG, "sd卡不存在");
+        }
+        return tmpPath;
+    }
+
 
     public static String timeNow() {
         //时间System.currentTimeMillis()
@@ -216,6 +223,7 @@ public class Utils {
         String time = simpleDateFormat.format(date);
         return time;
     }
+
     public static String timeNow(long times) {
         //时间System.currentTimeMillis()
         @SuppressLint("SimpleDateFormat")

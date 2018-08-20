@@ -196,11 +196,11 @@ public class FeatureContrastManager {
     //初始化人脸追踪引擎
     private static AFT_FSDKEngine getAFT_FSDKEngine() {
         AFT_FSDKEngine FTDKEngine = new AFT_FSDKEngine();
-        AFT_FSDKError err = FTDKEngine.AFT_FSDK_InitialFaceEngine(FaceConfig.faceAPP_Id, FaceConfig.faceFT_KEY, AFT_FSDKEngine.AFT_OPF_0_HIGHER_EXT, FaceConfig.scale, FaceConfig.maxContrastFacesNUM);
+        AFT_FSDKError err = FTDKEngine.AFT_FSDK_InitialFaceEngine(FaceConfig.faceAPP_Id, FaceConfig.faceFT_KEY, AFT_FSDKEngine.AFT_OPF_0_HIGHER_EXT, FaceConfig.scaleFT, FaceConfig.maxContrastFacesNUM);
         if (err.getCode() == 0) {
             return FTDKEngine;
         } else {
-            Log.d(TAG, "getAFD_FSDKEngine >> AFD_FSDK_InitialFaceEngine = " + err.getCode());
+            Log.d(TAG, "getAFT_FSDKEngine >> AFT_FSDK_InitialFaceEngine = " + err.getCode());
             return null;
         }
     }
@@ -229,6 +229,10 @@ public class FeatureContrastManager {
         }
     }
 
+    public void setVideoData(byte[] data, int width, int height) {
+        createImage(data, width, height);//生成图片
+        startContrastFeature(data, width, height);//设别
+    }
 
     /**
      * 开始视频人脸识别对比
@@ -242,40 +246,45 @@ public class FeatureContrastManager {
         if (familyFaceFRBeans == null || familyFaceFRBeans.size() == 0) {
             return;
         }
-        if (AFD == null || AFR == null || AFT == null) {
-            Log.d(TAG, "startContrastFeature  AFD && AFR init failed");
-            AFD = getAFD_FSDKEngine();//初始化搜集人脸
-            AFR = getAFR_FSDKEngine();//初始化人脸特征提取比对
-            AFT = getAFT_FSDKEngine();
-        }
-        AFD_FSDKError error_FD;
-        AFR_FSDKError error_FR;
-        List<AFD_FSDKFace> result_FD = new ArrayList<>();
-        error_FD = AFD.AFD_FSDK_StillImageFaceDetection(data, width, height, AFD_FSDKEngine.CP_PAF_NV21, result_FD);
-        if (error_FD.getCode() != 0) {
-            Log.d(TAG, "人脸数据提取错误 name >> " + error_FD.toString());
-            return;
-        }
-        if (result_FD.size() <= 0) {
-            return;
-        }
-        Log.d(TAG, "图像中人脸个数 >> " + result_FD.size());
+        if (AFT == null || AFR == null) {
 
-        //遍历人脸数组获取人脸信息
-        for (int i = 0; i < result_FD.size(); i++) {
+            if (AFR == null) {
+                Log.d(TAG, "startContrastFeature  AFR init failed");
+                AFR = getAFR_FSDKEngine();//初始化人脸特征提取比对
+            }
+            if (AFT == null) {
+                Log.d(TAG, "startContrastFeature  AFT init failed");
+                AFT = getAFT_FSDKEngine();
+            }
+        }
+        AFR_FSDKError error_FR;
+        AFT_FSDKError error_FT;
+        List<AFT_FSDKFace> result_FT = new ArrayList<>();
+        error_FT = AFT.AFT_FSDK_FaceFeatureDetect(data, width, height, AFT_FSDKEngine.CP_PAF_NV21, result_FT);
+        if (error_FT.getCode() != 0) {
+            Log.d(TAG, "视频人脸识别出错 >> " + error_FT.toString());
+            return;
+        }
+        if (result_FT.size() <= 0) {
+            return;
+        }
+        Log.d(TAG, "视频中人脸个数 >> " + result_FT.size());
+        for (AFT_FSDKFace faceFT : result_FT) {
             AFR_FSDKFace face = new AFR_FSDKFace(); // 用来存放提取到的人脸信息
-            AFD_FSDKFace item = result_FD.get(i);
-            Rect itemRect = item.getRect(); // 人脸在图片中的位置
-            int degree = item.getDegree(); // 人脸方向
+
+            Rect itemRect = faceFT.getRect(); // 人脸在图片中的位置
+            int degree = faceFT.getDegree(); // 人脸方向
             error_FR = AFR.AFR_FSDK_ExtractFRFeature(data, width, height, AFR_FSDKEngine.CP_PAF_NV21, itemRect, degree, face); // 提取人脸信息
             if (error_FR.getCode() != 0) {
                 Log.d(TAG, "这一帧中人脸特征数据提取错误");
                 continue;
             }
+
             byte[] faceData = face.getFeatureData();//人脸数据
-            Log.d(TAG, "获取到人脸数据 坐标为 : left = " + itemRect.left + " right :" + itemRect.right + " top :" + itemRect.top + " bottom :" + itemRect.bottom);
+            //faceData 这张人脸的坐标 itemRect
             contrastFaceFeature(faceData, itemRect, degree, width, height);
         }
+
     }
 
 
@@ -314,37 +323,18 @@ public class FeatureContrastManager {
                 }
                 return;
             }
+            //当前人脸是陌生人
+            Log.d(TAG, "人脸比对结果 是陌生人 坐标： " + rect.toString());
+            Log.d(TAG, "开始追踪陌生人 ");
+            startAlertVideo();
         }
 
-        //当前人脸是陌生人
-        Log.d(TAG, "人脸比对结果 是陌生人 ");
-        Log.d(TAG, "开始追踪陌生人 ");
-        cameraTrackStranger(face, width, height);
-    }
-
-    private void cameraTrackStranger(byte[] face, int width, int height) {
-        //陌生人开始录制警告视频
-        startAlertVideo();
-        //开始追踪人脸
-        AFT_FSDKError error_FT;
-        List<AFT_FSDKFace> result_FT = new ArrayList<>();
-        error_FT = AFT.AFT_FSDK_FaceFeatureDetect(face, width, height, AFT_FSDKEngine.CP_PAF_NV21, result_FT);
-        if (error_FT.getCode() != 0) {
-            Log.d(TAG, "人脸追踪出错 >> " + error_FT.toString());
-            return;
-        }
-        if (result_FT.size() <= 0) {
-            return;
-        }
-        for (AFT_FSDKFace faceFT : result_FT) {
-            Log.d(TAG, "人脸追踪 >> " + faceFT.toString());
-        }
     }
 
     private void startAlertVideo() {
         AvMediaRecorder mAvMediaRecorder = AvMediaRecorder.getInstance();
         AlertMediaMuxer alertMediaMuxer = AlertMediaMuxer.getInstance();
-        if (!alertMediaMuxer.AlertRecordRunning) {
+        if (!AlertMediaMuxer.AlertRecordRunning) {
             mAvMediaRecorder.startAlertRecord();
         } else {
             mAvMediaRecorder.resetStopTime(1);
@@ -554,8 +544,8 @@ public class FeatureContrastManager {
      * 识别文件夹下的所有图片的人脸信息 并保存
      */
     public ArrayList<FaceDatabase> getFRToExtractFeature(String faceName, String faceImagePath) {
-        this.faceName = faceName;
-        this.faceImagePath = faceImagePath;
+        FeatureContrastManager.faceName = faceName;
+        FeatureContrastManager.faceImagePath = faceImagePath;
         List<FacePictures> facePicCacheList = getFaceImageList(faceImagePath);
         ArrayList<FaceDatabase> faceDataList = new ArrayList<>();
         if (facePicCacheList == null || facePicCacheList.size() == 0) {
@@ -603,8 +593,40 @@ public class FeatureContrastManager {
                 Log.d(TAG, "获取到人脸数据 name >> " + facePIC.getName());
             }
         }
-        UninitFaceFeatureManager();
         return faceDataList;
+    }
+
+
+    private void createImage(byte[] data, int width, int height) {
+
+//        MediaExtractor extractor = new MediaExtractor();
+//        extractor.setDataSource();
+
+        if (!FaceConfig.startImage) {
+            return;
+        }
+        FaceConfig.startImage = false;
+        FaceConfig.imagePath = getImagePath();
+        Log.d(TAG, "开始生成图片 image = " + FaceConfig.imagePath);
+        try {
+            File file = new File(FaceConfig.imagePath);
+            FileOutputStream outputStream = new FileOutputStream(file);
+
+            YuvImage image = new YuvImage(data, ImageFormat.NV21, width, height, null);
+            image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        Log.d(TAG, "生成图片完成 image = " + FaceConfig.imagePath);
+    }
+
+    private String getImagePath () {
+        String tmpPath = Utils.getSDPath("ALERT");
+        if (tmpPath == null) return null;
+        String tmpFileName = FaceConfig.imageTitle + ".jpg";
+
+        return tmpPath + '/' + tmpFileName;
     }
     public static class FacePictures {
         private int width;

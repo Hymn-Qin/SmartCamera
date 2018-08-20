@@ -122,10 +122,10 @@ public class SmartCameraService extends Service {
                     Log.d(TAG, "send com.foxconn.zzdc.broadcast.camera receive -- type = " + type + " message = " + message);
                     Intent intents = new Intent("com.foxconn.zzdc.broadcast.camera");
                     intents.putExtra("type", type);
-                    if (MainActivity.mainActivity == null) {
-                        intents.putExtra("result", "false");
-                    } else {
+                    if (mApplicationSetting.getSystemMonitorOKSetting()) {
                         intents.putExtra("result", "true");
+                    } else {
+                        intents.putExtra("result", "false");
                     }
                     context.sendBroadcast(intents);
                 }
