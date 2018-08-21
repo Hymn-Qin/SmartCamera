@@ -23,6 +23,8 @@ import com.guo.android_extend.image.ImageConverter;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.controller.AlertMediaMuxer;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
+import com.zzdc.abb.smartcamera.controller.EncoderBuffer;
+import com.zzdc.abb.smartcamera.controller.VideoGather;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -33,10 +35,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import static com.zzdc.abb.smartcamera.FaceFeature.FaceConfig.isContrast;
 
-public class FeatureContrastManager {
+public class ContrastManager implements VideoGather.VideoRawDataListener {
 
     private static final String TAG = "qxj";
 
@@ -51,17 +54,34 @@ public class FeatureContrastManager {
     private boolean isStartImageOK = false;
     private boolean isStartImage = false;
 
+    private LinkedBlockingQueue<byte[]> videoDatas = new LinkedBlockingQueue<>();
+
     private static class FeatureContrastManagerHolder {
-        private static final FeatureContrastManager INSTANCE = new FeatureContrastManager();
+        private static final ContrastManager INSTANCE = new ContrastManager();
     }
 
-    private FeatureContrastManager() {
+    private ContrastManager() {
     }
 
-    public static final FeatureContrastManager getInstance() {
+    public static final ContrastManager getInstance() {
         return FeatureContrastManagerHolder.INSTANCE;
     }
 
+    Thread contrastThread = new Thread() {
+        @Override
+        public void run() {
+            super.run();
+            while (true) {
+                try {
+                    byte[] videoData = videoDatas.take();
+                    startContrastFeature(videoData, 0, 0);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }
+    };
 
     /**
      * 初始化人脸识别引擎 和 人脸比对引擎
@@ -223,6 +243,7 @@ public class FeatureContrastManager {
                 familyFaceFRBeans = new CopyOnWriteArrayList<>();
                 focusFaceFRBeans = new CopyOnWriteArrayList<>();
                 InitFaceFeatureManager();
+                contrastThread.start();
             } else {
                 UninitFaceFeatureManager();
             }
@@ -232,6 +253,11 @@ public class FeatureContrastManager {
     public void setVideoData(byte[] data, int width, int height) {
         createImage(data, width, height);//生成图片
         startContrastFeature(data, width, height);//设别
+    }
+
+    @Override
+    public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
+        videoDatas.offer(buf.getData());
     }
 
     /**
@@ -544,8 +570,8 @@ public class FeatureContrastManager {
      * 识别文件夹下的所有图片的人脸信息 并保存
      */
     public ArrayList<FaceDatabase> getFRToExtractFeature(String faceName, String faceImagePath) {
-        FeatureContrastManager.faceName = faceName;
-        FeatureContrastManager.faceImagePath = faceImagePath;
+        ContrastManager.faceName = faceName;
+        ContrastManager.faceImagePath = faceImagePath;
         List<FacePictures> facePicCacheList = getFaceImageList(faceImagePath);
         ArrayList<FaceDatabase> faceDataList = new ArrayList<>();
         if (facePicCacheList == null || facePicCacheList.size() == 0) {

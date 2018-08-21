@@ -5,24 +5,17 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.media.MediaScannerConnection;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
-import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceDatabase;
-import com.zzdc.abb.smartcamera.FaceFeature.FeatureContrastManager;
+import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
-import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
-import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 
-import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 
 
@@ -324,7 +317,7 @@ public class AvMediaRecorder {
         Log.d("qxj", "开始人脸识别");
         List<FaceDatabase> faceDatabaseList = Utils.getAllFaceData();
         List<FaceDatabase> focusDatabaseList = Utils.getFocusFaceData();
-        FeatureContrastManager feature = FeatureContrastManager.getInstance();
+        ContrastManager feature = ContrastManager.getInstance();
         feature.setSwitchContrast(true);
 
         if (faceDatabaseList != null && faceDatabaseList.size() > 0) {
@@ -338,7 +331,7 @@ public class AvMediaRecorder {
     }
 
     private void stopVideoFaceContrast() {
-        FeatureContrastManager feature = FeatureContrastManager.getInstance();
+        ContrastManager feature = ContrastManager.getInstance();
         feature.setSwitchContrast(false);
     }
 }

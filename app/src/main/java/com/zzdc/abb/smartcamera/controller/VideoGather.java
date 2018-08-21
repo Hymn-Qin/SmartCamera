@@ -9,13 +9,12 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 
-import com.zzdc.abb.smartcamera.FaceFeature.FeatureContrastManager;
+import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -294,8 +293,8 @@ public class VideoGather {
                 debug("onPreviewFrame: mVideoRawDataListeners size = "+mVideoRawDataListeners.size());
                 if (data == mVideoRawBuf.getData()) {
                     //添加人脸识别
-                    FeatureContrastManager featureContrastManager = FeatureContrastManager.getInstance();
-                    featureContrastManager.setVideoData(data, preWidth, preHeight);
+                    ContrastManager contrastManager = ContrastManager.getInstance();
+                    contrastManager.setVideoData(data, preWidth, preHeight);
 
 
                     for (VideoRawDataListener listener: mVideoRawDataListeners) {

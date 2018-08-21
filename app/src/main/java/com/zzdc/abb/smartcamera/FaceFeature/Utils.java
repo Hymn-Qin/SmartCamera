@@ -65,14 +65,14 @@ public class Utils {
         if (path == null) {
             return;
         }
-        FeatureContrastManager feature = FeatureContrastManager.getInstance();
+        ContrastManager feature = ContrastManager.getInstance();
         feature.setSwitchContrast(true);
         ArrayList<FaceDatabase> faceData = feature.getFRToExtractFeature(name, path);
         if (faceData == null || faceData.size() == 0) {
             return;
         }
 
-        FeatureContrastManager features = FeatureContrastManager.getInstance();
+        ContrastManager features = ContrastManager.getInstance();
         features.addFamilyFaceFeature(faceData);
         for (int i = 0; i < faceData.size(); i++) {
             Log.d(TAG, "识别到 name - " + faceData.get(i).name + " 的人脸数据" + i);
