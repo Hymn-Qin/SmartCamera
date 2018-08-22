@@ -30,13 +30,11 @@ import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
 import com.raizlabs.android.dbflow.config.FlowManager;
 import com.zzdc.abb.smartcamera.R;
-import com.zzdc.abb.smartcamera.SmartCameraService;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.Device;
 import com.zzdc.abb.smartcamera.util.LogTool;
-import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 import com.zzdc.abb.smartcamera.util.TUTKUIDUtil;
 import com.zzdc.abb.smartcamera.util.WindowUtils;
 
@@ -68,6 +66,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private static final String ACTION_OPEN_HOT_SPOT = "com.foxconn.zzdc.broadcast.OPEN_HOT_SPOT";
     private static final String ACTION_STOP_CAMERA = "com.foxconn.zzdc.broadcast.STOP_CAMERA";
     private static final String ACTION_START_CAMERA = "com.foxconn.zzdc.broadcast.START_CAMERA";
+    private static final String ACTION_START_ALERT = "com.foxconn.alert.camera.play";
     private boolean mIsEnableMonitor;
     private static Context mContext;
 
@@ -159,6 +158,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d(TAG, "Start camera after reset WIFI !!!");
                 StartRecord();
                 mAplicationSetting.setSystemMonitorSetting(true);
+            } else if (intent.getAction().equalsIgnoreCase(ACTION_START_ALERT)) {
+                String type = intent.getStringExtra("type");
+                String message = intent.getStringExtra("message");
+                Log.d(TAG, "get receive -- type = " + type + " message = " + message);
+                if (type.equals("ALERT")) {
+                    if (mAplicationSetting.getSystemMonitorOKSetting()) {
+                        if (!AlertMediaMuxer.AlertRecordRunning) {
+                            Log.d(TAG, "警告视频开始");
+                            AlertMediaMuxer.AlertRecordRunning = true;
+                            mAvMediaRecorder.startAlertRecord();
+                        } else {
+                            Log.d(TAG, "警告视频已经开始 延长录制时间");
+                            mAvMediaRecorder.resetStopTime(0);
+                        }
+                    }
+
+                } else
+                if (type.equals("Camera")) {
+
+                    if (message.equals("false")) {
+                        if (mAplicationSetting.getSystemMonitorOKSetting()) {
+                            mAplicationSetting.setSystemMonitorOKSetting(false);
+                            if (RecordRuning) {
+                               StopRecord();
+                            }
+                        }
+
+                    } else if (message.equals("true")) {
+
+                        if (!mAplicationSetting.getSystemMonitorOKSetting()) {
+                            mAplicationSetting.setSystemMonitorOKSetting(true);
+                            if (RecordRuning) {
+                                StartRecord();
+                            }
+                        }
+                    }
+                    Intent intents = new Intent("com.foxconn.zzdc.broadcast.camera");
+                    intents.putExtra("type", type);
+                    if (mAplicationSetting.getSystemMonitorOKSetting()) {
+                        intents.putExtra("result", "true");
+                    } else {
+                        intents.putExtra("result", "false");
+                    }
+                    context.sendBroadcast(intents);
+                }
             }
         }
     }
@@ -197,6 +241,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         filter.addAction("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
         filter.addAction(ACTION_OPEN_HOT_SPOT);
         filter.addAction(ACTION_START_CAMERA);
+        filter.addAction(ACTION_START_ALERT);
         mOneKeyCallReciever = new OneKeyCallReciever();
         registerReceiver(mOneKeyCallReciever, filter);
 
@@ -230,11 +275,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 startMonitorIfNeeded();
             }
         }
-
-        Intent serverIntent = new Intent(this, SmartCameraService.class);
-//        serverIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startService(serverIntent);
-//        getContext().startForegroundService(serverIntent);
     }
 
     private void initTUTK() {

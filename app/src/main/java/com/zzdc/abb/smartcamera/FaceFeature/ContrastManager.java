@@ -67,6 +67,12 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
         return FeatureContrastManagerHolder.INSTANCE;
     }
 
+    private OnContrastListener onContrastListener = null;
+
+    public void setOnContrastListener(OnContrastListener onContrastListener) {
+        this.onContrastListener = onContrastListener;
+    }
+
     Thread contrastThread = new Thread() {
         @Override
         public void run() {
@@ -295,6 +301,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
             return;
         }
         Log.d(TAG, "视频中人脸个数 >> " + result_FT.size());
+        List<Rect> rectList = new ArrayList<>();
         for (AFT_FSDKFace faceFT : result_FT) {
             AFR_FSDKFace face = new AFR_FSDKFace(); // 用来存放提取到的人脸信息
 
@@ -307,9 +314,12 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
             }
 
             byte[] faceData = face.getFeatureData();//人脸数据
+            rectList.add(itemRect);
             //faceData 这张人脸的坐标 itemRect
             contrastFaceFeature(faceData, itemRect, degree, width, height);
         }
+
+        onContrastListener.OnContrastSuccee(rectList);
 
     }
 
