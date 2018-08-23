@@ -1,15 +1,20 @@
 package com.zzdc.abb.smartcamera.controller;
 
+import android.graphics.Rect;
 import android.media.MediaFormat;
 import android.util.Log;
 
 import com.tutk.IOTC.AVFrame;
+import com.tutk.IOTC.Packet;
+import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
+import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
 import com.zzdc.abb.smartcamera.common.Constant;
 import com.zzdc.abb.smartcamera.info.TutkFrame;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -24,6 +29,9 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
 
     private Thread mVideoDataSendThread;
     private Thread mAudioDataSendThread;
+    private ContrastManager contrastManager;
+    private volatile boolean isGetFaceInfo = false;
+    byte[] mRects;
 
 
     private CopyOnWriteArrayList<AvTransferLister> mAvTransferListers = new CopyOnWriteArrayList<>();
@@ -69,6 +77,41 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         mAudioBufPool.setDebug(DEBUG);
         mVideoBufPool.setDebug(DEBUG);
         mAudioDataSendThread.start();
+        contrastManager = ContrastManager.getInstance();
+        contrastManager.onContrasManager(new OnContrastListener() {
+            @Override
+            public void onContrastRects(List<Rect> rects) {
+                LogTool.d(TAG,"Attention please! there are alert faces!");
+                mRects = new byte[48];
+                int rectNum = rects.size();
+                for (int i =0; i<rectNum;i++){
+                    if (i>2) {
+                        break;
+                    }
+                    Rect rect = rects.get(i);
+                    System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
+                    System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
+                    System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
+                    System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
+                }
+                isGetFaceInfo = true;
+            }
+
+            @Override
+            public void onContrastSucceed(boolean focus, String identity) {
+
+            }
+
+            @Override
+            public void onContrastFailed(String msg, byte[] stranger) {
+
+            }
+
+            @Override
+            public void onContrastError(String message) {
+
+            }
+        });
     }
 
     public void stopAvMediaTransfer() {
@@ -76,6 +119,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         mVideoDataSendThread.interrupt();
         mVideoQueue.clear();
         mAudioQueue.clear();
+        mRects = null;
     }
 
     @Override
@@ -131,6 +175,12 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         tmpOutBuf.position(0);
 
         frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
+
+        if (isGetFaceInfo) {
+            frame.getFrameInfo().mRects = mRects;
+            mRects = null;
+            isGetFaceInfo = false;
+        }
 //        frame.getFrameInfo().mType = "H264";
 //        frame.getFrameInfo().timestamp = "1970-01-01 08:00:00";
 

@@ -12,12 +12,4 @@ public class FaceConfig {
     public static final int scaleFT = 16;//
 
     public static final int maxContrastFacesNUM = 3;//指定检测的人脸数量
-    public static boolean isContrast = false;
-
-    public static String imagePath; //保存视频路径
-
-    public static String imageTitle; //保存视频和图片名字
-
-    public static boolean startImage = false;
-
 }

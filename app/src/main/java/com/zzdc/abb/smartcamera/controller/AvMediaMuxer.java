@@ -4,18 +4,21 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.util.Log;
+
+import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
+
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener{
+public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEncoder.VideoEncoderListener {
     private final static String TAG = AvMediaMuxer.class.getSimpleName();
 
-    private boolean mMuxering;
+    public boolean mMuxering;
     private MediaMuxer mMediaMuxer;
     private LinkedBlockingQueue<EncoderBuffer> mMuxerDatas = new LinkedBlockingQueue<>();
     private BufferPool<EncoderBuffer> mEncodBuf = new BufferPool<>(EncoderBuffer.class, 3);
@@ -31,6 +34,9 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
     private long mLastVideoFrameTimestamp = 0;
     private boolean isPPSAdded = false;
 
+    private String types;
+    private boolean startCreate = false;
+    private String imageFile = null;
     private Thread mWorkThread = new Thread("MediaMuxer-thread") {
         @Override
         public void run() {
@@ -42,7 +48,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                     data = mMuxerDatas.take();
                     if (data.getTrack() == TRACK_VIDEO) {
                         mMediaMuxer.writeSampleData(mVideoTrackIndex, data.getByteBuffer(), data.getBufferInfo());
-                    } else if(data.getTrack() == TRACK_AUDIO){
+                    } else if (data.getTrack() == TRACK_AUDIO) {
                         mMediaMuxer.writeSampleData(mAudioTrackIndex, data.getByteBuffer(), data.getBufferInfo());
                     } else {
                         LogTool.w(TAG, "Find unknow track. " + data.getTrack());
@@ -59,28 +65,43 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                 mMediaMuxer.stop();
                 mMediaMuxer.release();
             } catch (Exception e) {
-                LogTool.e(TAG,"Stop MediaMuxer failed!!! : ",e);
+                LogTool.e(TAG, "Stop MediaMuxer failed!!! : ", e);
             }
             LogTool.d(TAG, "Media muxer thread stop.");
         }
     };
 
+    public AvMediaMuxer(String type) {
+        this.types = type;
+    }
+
     public boolean startMediaMuxer() {
 
-        if ((AUDIO_FORMAT == null || VIDEO_FORMAT ==  null)){
+        if ((AUDIO_FORMAT == null || VIDEO_FORMAT == null)) {
             AUDIO_FORMAT = AudioEncoder.AUDIO_FORMAT;
-            VIDEO_FORMAT  = VideoEncoder.VIDEO_FORMAT;
+            VIDEO_FORMAT = VideoEncoder.VIDEO_FORMAT;
         }
 
-        if ((AUDIO_FORMAT == null || VIDEO_FORMAT ==  null)){
-            LogTool.e(TAG,"AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
+        if ((AUDIO_FORMAT == null || VIDEO_FORMAT == null)) {
+            LogTool.e(TAG, "AUDIO_FORMAT = " + AUDIO_FORMAT + ", VIDEO_FORMAT = " + VIDEO_FORMAT);
             return false;
         } else {
-            String tmpMediaFile = MediaStorageManager.getInstance().generateHistoryMediaFileName();
+            String tmpMediaFile = null;
+            switch (types) {
+                case "History":
+                    tmpMediaFile = MediaStorageManager.getInstance().generateHistoryMediaFileName();
+                    break;
+                case "Alert":
+                    startCreate = true;
+                    tmpMediaFile = MediaStorageManager.getInstance().generateWarningMediaFileName();
+                    imageFile = MediaStorageManager.getInstance().generateWarningImageFileName(tmpMediaFile);
+                    break;
+            }
+
             try {
                 LogTool.d(TAG, "Create MediaMuxer start");
                 mMediaMuxer = new MediaMuxer(tmpMediaFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            }catch (Exception e){
+            } catch (Exception e) {
                 LogTool.e(TAG, "Create MediaMuxer with exception, ", e);
                 return false;
             }
@@ -109,7 +130,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
 
     @Override
     public void onAudioEncoded(EncoderBuffer buf) {
-        if(!mMuxering)
+        if (!mMuxering)
             return;
 
         ByteBuffer bufferSrc = buf.getByteBuffer();
@@ -137,7 +158,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
 
     @Override
     public void onVideoEncoded(EncoderBuffer buf) {
-        if(!mMuxering)
+        if (!mMuxering)
             return;
 
         ByteBuffer bufferSrc = buf.getByteBuffer();
@@ -149,7 +170,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
         }
 
         int type = bufferSrc.get(4) & 0x1F;
-        if (type == 5 && !isPPSAdded){
+        if (type == 5 && !isPPSAdded) {
             VideoEncoder.PPS_BUFFER_INFO.presentationTimeUs = buf.getBufferInfo().presentationTimeUs;
             EncoderBuffer tmpPPSBuffer = mEncodBuf.getBuf(VideoEncoder.PPS_BUFFER_INFO.size);
             tmpPPSBuffer.put(VideoEncoder.PPS_BUFFER, VideoEncoder.PPS_BUFFER_INFO);
@@ -157,6 +178,12 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
             mLastVideoFrameTimestamp = buf.getBufferInfo().presentationTimeUs;
             mMuxerDatas.offer(tmpPPSBuffer);
             isPPSAdded = true;
+//            if (types.equals("Alert") && startCreate && imageFile != null) {
+//                startCreate = false;
+//                Log.d("qxj", "start create first image");
+//                Utils.createImage(imageFile, tmpPPSBuffer.getByteBuffer(), 1920, 1080);
+//                imageFile = null;
+//            }
         }
 
         if (!isPPSAdded)

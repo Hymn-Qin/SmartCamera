@@ -41,7 +41,7 @@ public class SurfacePreview extends SurfaceView implements SurfaceHolder.Callbac
     public void surfaceCreated(SurfaceHolder arg0) {
         Log.d(TAG, "******************* surfaceCreated() ***************");
         mAplicationSetting = ApplicationSetting.getInstance();
-        if(mAplicationSetting.getSystemMonitorSetting()){
+        if(mAplicationSetting.getSystemMonitorOKSetting()){
             VideoGather.getInstance().doOpenCamera();
             VideoGather.getInstance().doStartPreview(mActivity,arg0);
         }
@@ -52,7 +52,7 @@ public class SurfacePreview extends SurfaceView implements SurfaceHolder.Callbac
     public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2, int arg3) {
         Log.d(TAG, "******************* surfaceChanged() ***************");
         mAplicationSetting = ApplicationSetting.getInstance();
-        if(mAplicationSetting.getSystemMonitorSetting()){
+        if(mAplicationSetting.getSystemMonitorOKSetting()){
             VideoGather.getInstance().doOpenCamera();
             VideoGather.getInstance().doStartPreview(mActivity,arg0);
         }

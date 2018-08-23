@@ -61,6 +61,50 @@ public class DataBaseHelper extends SQLiteOpenHelper {
         public static final String DELETE = "delete from " + TABLE;
     }
 
+    public static final class WarnImage {
+        public static final String TABLE = "warning_image";
+        public static final String FILE_NAME = "file";
+        public static final String START_STRING = "startTime";
+        public static final String START_LONG = "startTimeLong";
+
+        private static final String CREATE = "create table "+TABLE+" ("
+                + FILE_NAME +" text primary key, "
+                + START_STRING + " text, "
+                + START_LONG + " integer)";
+
+        public static final String DELETE = "delete from " + TABLE;
+    }
+
+    public static final class FocusImage {
+        public static final String TABLE = "focus_image";
+        public static final String FILE_NAME = "file";
+        public static final String START_STRING = "startTime";
+        public static final String START_LONG = "startTimeLong";
+
+        private static final String CREATE = "create table "+TABLE+" ("
+                + FILE_NAME +" text primary key, "
+                + START_STRING + " text, "
+                + START_LONG + " integer)";
+
+        public static final String DELETE = "delete from " + TABLE;
+    }
+
+    public static final class Face {
+        public static final String TABLE = "face";
+        public static final String NAME = "name";
+        public static final String DIRECTION = "direction";
+        public static final String FOCUS = "focus";
+        public static final String FEATURE = "eigenvalue";
+
+        private static final String CREATE = "create table "+TABLE+" ("
+                + NAME +" text , "
+                + DIRECTION + " integer,"
+                + FOCUS + " boolean,"
+                + FEATURE + " blob)";
+
+        public static final String DELETE = "delete from " + TABLE;
+    }
+
     public DataBaseHelper(Context context) {
         super(context, DB_NAME, null, VERSION);
     }
@@ -70,6 +114,9 @@ public class DataBaseHelper extends SQLiteOpenHelper {
         db.execSQL(History.CREATE);
         db.execSQL(HistoryQuantum.CREATE);
         db.execSQL(Warning.CREATE);
+        db.execSQL(WarnImage.CREATE);
+        db.execSQL(FocusImage.CREATE);
+        db.execSQL(Face.CREATE);
     }
 
     @Override

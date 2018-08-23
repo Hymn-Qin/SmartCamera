@@ -6,21 +6,17 @@ import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.media.AudioManager;
 import android.util.Log;
-
 import com.google.gson.Gson;
 import com.ptz.PTZControl.PTZControlCallBackContainer;
 import com.ptz.PTZControl.PTZControlManager;
 import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
-import com.raizlabs.android.dbflow.sql.language.SQLite;
 import com.tutk.IOTC.AVIOCTRLDEFs;
-import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData;
-import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData_Table;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceFromClient;
+import com.zzdc.abb.smartcamera.FaceFeature.FacePictures;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.AACDecoder;
-import com.zzdc.abb.smartcamera.controller.AlertMediaMuxer;
 import com.zzdc.abb.smartcamera.controller.AudioEncoder;
 import com.zzdc.abb.smartcamera.controller.AudioGather;
 import com.zzdc.abb.smartcamera.controller.AvMediaRecorder;
@@ -32,11 +28,9 @@ import com.zzdc.abb.smartcamera.controller.PCMAudioDataTransfer;
 import com.zzdc.abb.smartcamera.controller.VideoEncoder;
 import com.zzdc.abb.smartcamera.info.MediaDurationInfo;
 import com.zzdc.abb.smartcamera.util.LogTool;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -173,12 +167,6 @@ public class TutkCmdManager {
             case STOP_ONE_KEY_CALL:
                 handleStopOneKeyCall();
                 break;
-            case START_MONITOR:
-                handleStartMonitor();
-                break;
-            case STOP_MONITOR:
-                handleStopMonitor();
-                break;
             case GET_HISTORY_INFORMATION:
                 handleGetHistoryInfo();
                 break;
@@ -221,7 +209,7 @@ public class TutkCmdManager {
     }
 
     private void handleIpCameraStop() {
-        LogTool.d(TAG, " IOTYPE_USER_IPCAM_STOP");
+        LogTool.d(TAG, " LEON-IOTYPE_USER_IPCAM_STOP");
         mTutkSession.writeMessge("ok");
 
         if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
@@ -304,34 +292,13 @@ public class TutkCmdManager {
         PCMAudioDataTransfer.getInstance().changeVoiceMode(PCMAudioDataTransfer.TELEPHONY_OFF_MODE);
     }
 
-    private void handleStartMonitor() {
-        Log.d(TAG, "Handle " + START_MONITOR);
-        if (mAvMediaRecorder == null) {
-            mAvMediaRecorder = AvMediaRecorder.getInstance();
-        }
-        mAplicationSetting = ApplicationSetting.getInstance();
-        mAplicationSetting.setSystemMonitorSetting(true);
-        mAvMediaRecorder.init();
-        mAvMediaRecorder.avMediaRecorderStart();
-    }
-
-    private void handleStopMonitor() {
-        LogTool.d(TAG, "Handle " + STOP_MONITOR);
-        mAplicationSetting = ApplicationSetting.getInstance();
-        mAplicationSetting.setSystemMonitorSetting(false);
-        if (mAvMediaRecorder == null) {
-            mAvMediaRecorder = AvMediaRecorder.getInstance();
-        }
-        mAvMediaRecorder.avMediaRecorderStop();
-    }
-
     private void handleGetHistoryInfo() {
         try {
             LogTool.d(TAG, "Handle " + GET_HISTORY_INFORMATION);
             List<MediaDurationInfo> infos = MediaStorageManager.getInstance().getHistoryDurationInfo();
+            JSONObject jObj = new JSONObject();
             if (infos == null || infos.size() == 0) {
                 LogTool.w(TAG, "No history duration info");
-                JSONObject jObj = new JSONObject();
                 jObj.put("type", GET_HISTORY_INFORMATION);
                 jObj.put("ret", "-1");
                 mTutkSession.writeMessge(jObj.toString());
@@ -339,24 +306,20 @@ public class TutkCmdManager {
                 JSONArray blkQuantum = new JSONArray();
                 for (int i = 0; i < infos.size(); i++) {
                     MediaDurationInfo info = infos.get(i);
-                    String start = TIME_FORMAT.get().format(new Date(info.getStart() * 1000));
-                    String end = TIME_FORMAT.get().format(new Date(info.getEnd() * 1000));
+                    String start = TIME_FORMAT.get().format(new Date(info.getStart()));
+                    String end = TIME_FORMAT.get().format(new Date(info.getEnd()));
                     JSONObject quantum = new JSONObject();
                     quantum.put("mStart", start);
                     quantum.put("mEnd", end);
                     blkQuantum.put(quantum);
                 }
-                JSONObject jObj = new JSONObject();
                 jObj.put("type", GET_HISTORY_INFORMATION);
                 jObj.put("ret", "0");
                 jObj.put("DateArray", blkQuantum);
                 mTutkSession.writeMessge(jObj.toString());
 
-                JSONObject jObjEnd = new JSONObject();
-                jObjEnd.put("type", GET_HISTORY_INFORMATION);
-                jObjEnd.put("ret", "1");
-                mTutkSession.writeMessge(jObjEnd.toString());
             }
+            LogTool.d(TAG,"Return cliend history info = "+jObj.toString());
         } catch (JSONException e) {
             LogTool.w(TAG, "Handle " + GET_HISTORY_INFORMATION + " with exception, ", e);
         }
@@ -366,15 +329,16 @@ public class TutkCmdManager {
         try {
             String stringTime = jObj.getString("time");
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " time: " + stringTime);
-            long longTime = TIME_FORMAT.get().parse(stringTime).getTime() / 1000;
+            long longTime = TIME_FORMAT.get().parse(stringTime).getTime();
             String file = MediaStorageManager.getInstance().getHistoryFile(longTime);
-            if (file == null) {
-                JSONObject j = new JSONObject();
+            JSONObject j = new JSONObject();
+            if ( file == null) {
+                j.put("type","setHistoryVideo");
                 j.put("ret", "-1");
                 j.put("desc", "File not exist");
                 mTutkSession.writeMessge(j.toString());
             } else {
-                JSONObject j = new JSONObject();
+                j.put("type","setHistoryVideo");
                 j.put("ret", "0");
                 j.put("desc", " ");
                 mTutkSession.writeMessge(j.toString());
@@ -382,7 +346,7 @@ public class TutkCmdManager {
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
                     AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
-                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
+                } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER){
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
@@ -415,7 +379,7 @@ public class TutkCmdManager {
     }
 
     private void handleSetFacePictures(String jObj) {
-        try {
+
             Gson gson = new Gson();
             FaceFromClient fromClient = gson.fromJson(jObj, FaceFromClient.class);
             if (fromClient == null) {
@@ -426,34 +390,22 @@ public class TutkCmdManager {
             if (dataArrayList == null || dataArrayList.size() == 0) {
                 return;
             }
-            // TODO
+            List<FacePictures> facePictures = new ArrayList<>();
             for (int i = 0; i < dataArrayList.size(); i++) {
                 FaceFromClient.Data data = dataArrayList.get(i);
                 byte[] faceData = data.getFaceData();
                 String direction = data.getDirection();
-                if (faceData.length < 3) continue;
-
-                File file = Utils.getFacePictureFile(name + "_" + direction);
-                if (file == null) return;
-                //图片的 宽高
-                FileOutputStream outputStream = null;
-                outputStream = new FileOutputStream(file);
-
-                YuvImage image = new YuvImage(faceData, ImageFormat.NV21, 1080, 960, null);
-                image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+                FacePictures facePicture = Utils.getFaceImage(faceData, name, direction);
+                facePictures.add(facePicture);
             }
-
             //提取人脸数据
-            Utils.startGetFeature(name);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
+            Utils.startGetFeature(facePictures);
     }
 
     private void handleGetAlertInfo() {
 
         Log.d(TAG, "Handle " + GET_ALERT_INFORMATION);
-        List<AlertVideoData> alertVideoDataList = SQLite.select().from(AlertVideoData.class).queryList();
+        List<MediaDurationInfo> alertVideoDataList = MediaStorageManager.getInstance().getWarningDurationInfo();
         Map<String, Object> map = new HashMap<>();
         map.put("type", GET_ALERT_INFORMATION);
         if (alertVideoDataList.size() == 0) {
@@ -469,12 +421,9 @@ public class TutkCmdManager {
         try {
             String stringTime = jObj.getString("time");
             LogTool.w(TAG, "Handle " + SET_ALERT_FILE + " time: " + stringTime);
-            long longTime = TIME_FORMAT.get().parse(stringTime).getTime() / 1000;
-            AlertVideoData alertVideoData = SQLite.select().from(AlertVideoData.class)
-                    .where(AlertVideoData_Table.startTime.lessThanOrEq(longTime),
-                            AlertVideoData_Table.endTime.greaterThanOrEq(longTime))
-                    .querySingle();
-            if (alertVideoData != null) {
+            long longTime = TIME_FORMAT.get().parse(stringTime).getTime();
+            String file = MediaStorageManager.getInstance().getWarningFile(longTime);
+            if (file != null) {
                 JSONObject j = new JSONObject();
                 j.put("ret", "0");
                 j.put("desc", " ");
@@ -489,7 +438,8 @@ public class TutkCmdManager {
                         mExtractor.stop();
                     }
                 }
-                mExtractor = new MP4Extrator(alertVideoData.filePath, longTime, alertVideoData.startTime);
+                long videoStartTime = MediaStorageManager.getWarningMediaStartTime(file);
+                mExtractor = new MP4Extrator(file, longTime, videoStartTime);
                 mExtractor.registerExtratorListener(mMediaTransfer);
                 mExtractor.init();
                 mExtractor.start();
@@ -504,5 +454,7 @@ public class TutkCmdManager {
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " with exception, ", e);
         }
     }
+
+    private void handleGetAlertPictures() {}
 
 }

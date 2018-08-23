@@ -207,7 +207,7 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
             return;
         }
         FrameInfo frameInfo = tutkFrame.getFrameInfo();
-        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags, frameInfo.timestamp);
+        byte[] buf_info = frameInfo.parseContent();
         int rst = AVAPIs.avSendFrameData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
         if (rst == AVAPIs.AV_ER_NoERROR) {
             debug("Send video data succeed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());
@@ -242,7 +242,7 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
             return;
         }
         FrameInfo frameInfo = tutkFrame.getFrameInfo();
-        byte[] buf_info = frameInfo.parseContent(frameInfo.codec_id, frameInfo.flags, frameInfo.timestamp);
+        byte[] buf_info = frameInfo.parseContent();
         int rst = AVAPIs.avSendAudioData(mChannelID, tutkFrame.getData(), tutkFrame.getDataLen(), buf_info, buf_info.length);
         if (rst == AVAPIs.AV_ER_NoERROR) {
             debug("Send audio data succeed, sid=" + mSessionID + ", result=" + rst + ", channel=" + mChannelID + ", size=" + tutkFrame.getDataLen());

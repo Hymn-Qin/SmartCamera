@@ -137,27 +137,31 @@ public class AudioGather {
         workThread = new Thread() {
             @Override
             public void run() {
-                if (audioRecord != null) {
+                if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
                     audioRecord.startRecording();
                 }
-                while (loop && !Thread.interrupted()) {
-                    //读取音频数据到buf
-                    int size = 0;
-                    AudioBuf audioRawBuf = mBufPool.getBuf();
-                    if (audioRecord != null){
-                        size = audioRecord.read(audioRawBuf.getData(),0,audioRawBuf.getData().length);
-                    }
-                    debug("AudioRecord read. size = " +size + ",  SampleRate = " + mSampleRate
-                            + ", ChannelCount = " + mChannelCount
-                            + ", PcmFormat = " + mPcmFormat
-                            + ", BufferSize = " + mBufferSize);
-
-                    if (size > 0) {
-                        for (AudioRawDataListener listener: mAudioRawDataListeners) {
-                            listener.onAudioRawDataReady(audioRawBuf);
+                while (loop) {
+                    try {
+                        //读取音频数据到buf
+                        int size = 0;
+                        AudioBuf audioRawBuf = mBufPool.getBuf();
+                        if (audioRecord != null){
+                            size = audioRecord.read(audioRawBuf.getData(),0,audioRawBuf.getData().length);
                         }
+                        debug("AudioRecord read. size = " +size + ",  SampleRate = " + mSampleRate
+                                + ", ChannelCount = " + mChannelCount
+                                + ", PcmFormat = " + mPcmFormat
+                                + ", BufferSize = " + mBufferSize);
+
+                        if (size > 0) {
+                            for (AudioRawDataListener listener: mAudioRawDataListeners) {
+                                listener.onAudioRawDataReady(audioRawBuf);
+                            }
+                        }
+                        audioRawBuf.decreaseRef();
+                    } catch (Exception e) {
+                        LogTool.d(TAG,"Audio record thread stop!!! ",e);
                     }
-                    audioRawBuf.decreaseRef();
                 }
                 LogTool.d(TAG, "Audio record stoped...");
             }

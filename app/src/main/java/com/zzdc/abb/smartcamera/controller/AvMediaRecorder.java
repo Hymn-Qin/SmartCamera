@@ -10,13 +10,9 @@ import android.os.Message;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
-import com.zzdc.abb.smartcamera.FaceFeature.FaceDatabase;
-import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
-
-import java.util.List;
 
 
 public class AvMediaRecorder {
@@ -25,8 +21,7 @@ public class AvMediaRecorder {
 
     private AudioGather mAudioGather;
     private VideoGather mVideoGather;
-    private AvMediaMuxer mMuxer;
-    private AlertMediaMuxer alertMuxer;
+    private AvMediaMuxer mMuxer, alertMuxer;
     private Activity mActivity;
     private SurfaceHolder mHolder;
     private AudioEncoder mAudioEncoder;
@@ -38,16 +33,16 @@ public class AvMediaRecorder {
     private static final int CHECK_STORAGE = 204;
     private static int SD_MEM_THRESHOLD = 300; //SD card mem threshold
     public boolean ABBassistantRuning = true;
-	private SDCardBroadcastReceiver mReceiver;
-	private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
+    private SDCardBroadcastReceiver mReceiver;
+    private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
 
-    private Handler mHandler = new Handler(){
+    private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
             switch (msg.what) {
                 case START_RECORD:
-                    if (mIsMonitor){
+                    if (mIsMonitor) {
                         startRecord();
                     }
                     break;
@@ -55,7 +50,7 @@ public class AvMediaRecorder {
                     stopRecord();
                     break;
                 case WAIT_TO_START:
-                    if(mIsMonitor){
+                    if (mIsMonitor) {
                         waitForStart();
                     }
                     break;
@@ -65,15 +60,15 @@ public class AvMediaRecorder {
         }
     };
 
-    public class SDCardBroadcastReceiver extends BroadcastReceiver{
+    public class SDCardBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)){
-                LogTool.d(TAG,"Intent.ACTION_MEDIA_EJECT");
+            if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)) {
+                LogTool.d(TAG, "Intent.ACTION_MEDIA_EJECT");
                 stopRecord();
                 MediaStorageManager.getInstance().stop();
-            } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)){
-                Log.d(TAG,"Intent.ACTION_MEDIA_MOUNTED");
+            } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)) {
+                Log.d(TAG, "Intent.ACTION_MEDIA_MOUNTED");
                 MediaStorageManager.getInstance().start();
                 startRecord();
             }
@@ -100,8 +95,6 @@ public class AvMediaRecorder {
     }
 
     public void init() {
-        //提取人脸数据
-        Utils.startGetFeature("qin");
         if (!mAudioGather.AudioGatherRuning) {
             mAudioGather.SetAudioSourceTypeForMonitor();
             mAudioGather.prepareAudioRecord();
@@ -137,10 +130,10 @@ public class AvMediaRecorder {
         //开始人脸识别
 //        startVideoFaceContrast();
 
-        if(MediaStorageManager.getInstance().isReady()){
+        if (MediaStorageManager.getInstance().isReady()) {
             startRecord();
-        }else {
-            Log.d(TAG,"MediaStorageManager not ready");
+        } else {
+            Log.d(TAG, "MediaStorageManager not ready");
         }
         mIsMonitor = true;
     }
@@ -194,22 +187,22 @@ public class AvMediaRecorder {
         return mRecorder;
     }
 
-    private void startRecord(){
-        Log.d(TAG ,"startRecord");
-        if(!MediaStorageManager.getInstance().isReady()){
-            Log.d(TAG,"MediaStorageManager hasn't ready");
+    private void startRecord() {
+        Log.d(TAG, "startRecord");
+        if (!MediaStorageManager.getInstance().isReady()) {
+            Log.d(TAG, "MediaStorageManager hasn't ready");
             return;
         }
-        mMuxer = new AvMediaMuxer();
+        mMuxer = new AvMediaMuxer("History");
         waitForStart();
     }
 
-    private void waitForStart(){
+    private void waitForStart() {
         if (MediaStorageManager.getInstance().isReady()) {
-            if(mMuxer == null){
+            if (mMuxer == null) {
                 return;
             }
-            if(!mMuxer.startMediaMuxer()){
+            if (!mMuxer.startMediaMuxer()) {
                 mHandler.sendEmptyMessageDelayed(WAIT_TO_START, 1000);
             } else {
                 mHandler.sendEmptyMessageDelayed(STOP_RECORD, 5 * 60 * 1000);
@@ -217,15 +210,15 @@ public class AvMediaRecorder {
         }
     }
 
-    private void stopRecord(){
-        Log.d(TAG ," stopRecord ");
-        if(mMuxer!= null){
+    private void stopRecord() {
+        Log.d(TAG, " stopRecord ");
+        if (mMuxer != null) {
             mMuxer.stopMediaMuxer();
             mMuxer = null;
         }
 
-        if(!MediaStorageManager.getInstance().isReady()){
-            Log.d(TAG,"MediaStorageManager hasn't ready");
+        if (!MediaStorageManager.getInstance().isReady()) {
+            Log.d(TAG, "MediaStorageManager hasn't ready");
             return;
         }
 /*        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
@@ -238,15 +231,18 @@ public class AvMediaRecorder {
     }
 
 
-
     public void startAlertRecord() {
-        Log.d(TAG ,"startRecord");
-        if(!MediaStorageManager.getInstance().isReady()){
-            Log.d(TAG,"MediaStorageManager hasn't ready");
+        Log.d(TAG, "startRecord");
+        if (!MediaStorageManager.getInstance().isReady()) {
+            Log.d(TAG, "MediaStorageManager hasn't ready");
+            return;
+        }
+        if (alertMuxer != null && alertMuxer.mMuxering) {
+            resetStopTime(3000);
             return;
         }
         Log.d("qxj", "startAlertRecord---");
-        alertMuxer = AlertMediaMuxer.getInstance();
+        alertMuxer = new AvMediaMuxer("Alert");
         waitAlertForStart();
     }
 
@@ -273,7 +269,7 @@ public class AvMediaRecorder {
                     public void run() {
                         waitAlertForStart();
                     }
-                }, 500);
+                }, 1000);
             } else {
                 handler = new Handler();
                 runnable = new Runnable() {
@@ -288,12 +284,11 @@ public class AvMediaRecorder {
 
     }
 
-    public void resetStopTime(int type) {
+    public void resetStopTime(long time) {
         if (handler != null && runnable != null) {
             handler.removeCallbacks(runnable);
             handler = null;
             runnable = null;
-
             handler = new Handler();
             runnable = new Runnable() {
                 @Override
@@ -301,37 +296,9 @@ public class AvMediaRecorder {
                     stopAlertRecord();
                 }
             };
-            switch (type) {
-                case 0:
-                    handler.postDelayed(runnable, 30 * 1000);
-                    break;
-                case 1:
-                    handler.postDelayed(runnable, 30 * 1000);
-                    break;
-            }
+            handler.postDelayed(runnable, time);
+
         }
-    }
-
-    //初始化 视频人脸识别
-    private void startVideoFaceContrast() {
-        Log.d("qxj", "开始人脸识别");
-        List<FaceDatabase> faceDatabaseList = Utils.getAllFaceData();
-        List<FaceDatabase> focusDatabaseList = Utils.getFocusFaceData();
-        ContrastManager feature = ContrastManager.getInstance();
-        feature.setSwitchContrast(true);
-
-        if (faceDatabaseList != null && faceDatabaseList.size() > 0) {
-            Log.d("qxj", "获取到数据库中的人脸数据不为空");
-            feature.setFamilyFace(faceDatabaseList);
-        }
-
-        if (focusDatabaseList != null && focusDatabaseList.size() > 0) {
-            feature.setFamilyFocusFace(focusDatabaseList);
-        }
-    }
-
-    private void stopVideoFaceContrast() {
-        ContrastManager feature = ContrastManager.getInstance();
-        feature.setSwitchContrast(false);
     }
 }
+

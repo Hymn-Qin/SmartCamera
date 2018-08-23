@@ -1,11 +1,11 @@
 package com.zzdc.abb.smartcamera.FaceFeature;
 
 import android.graphics.Rect;
-
 import java.util.List;
 
 public interface OnContrastListener {
-    void OnContrastSuccee(List<Rect> rects);
-    void OnContrastFiled(String msg, String name);
-    void OnContrastError(String msg);
+    void onContrastRects(List<Rect> rects);
+    void onContrastSucceed(boolean focus, String identity);
+    void onContrastFailed(String msg, byte[] stranger);
+    void onContrastError(String message);
 }

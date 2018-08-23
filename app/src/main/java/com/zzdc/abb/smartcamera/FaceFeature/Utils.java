@@ -1,14 +1,25 @@
 package com.zzdc.abb.smartcamera.FaceFeature;
 
 import android.annotation.SuppressLint;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
+import android.media.ExifInterface;
 import android.util.Log;
 
-import com.raizlabs.android.dbflow.sql.language.SQLite;
+import com.guo.android_extend.image.ImageConverter;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
+import com.zzdc.abb.smartcamera.common.ApplicationSetting;
+import com.zzdc.abb.smartcamera.controller.MediaStorageManager;
 import com.zzdc.abb.smartcamera.util.LogTool;
-
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -20,151 +31,48 @@ public class Utils {
 
     private static final String facePath = "FACE";
 
-    /**
-     * 保存或修改 家庭成员人脸数据
-     *
-     * @param name     成员名字
-     * @param faceData 成员人脸数据
-     */
-    private static void saveOrUpdateFaceData(String name, String direction, byte[] faceData) {
-        FaceDatabase faceDatabase = SQLite.select()
-                .from(FaceDatabase.class)
-                .where(FaceDatabase_Table.name.eq(name), FaceDatabase_Table.direction.eq(direction))
-                .querySingle();
-        if (faceDatabase != null) {
-            SQLite.update(FaceDatabase.class)
-                    .set(FaceDatabase_Table.times.eq(timeNow()), FaceDatabase_Table.face.eq(faceData))
-                    .where(FaceDatabase_Table.id.is(faceDatabase.id)).execute();
-            Log.d(TAG, "更新人脸数据 name >> " + name);
 
-        } else {
-            faceDatabase = new FaceDatabase();
-            faceDatabase.times = timeNow();
-            faceDatabase.name = name;
-            faceDatabase.face = faceData;
-            faceDatabase.direction = direction;
-            faceDatabase.focus = false;
-            faceDatabase.save();
-            Log.d(TAG, "保存新的人脸数据 name >> " + name);
-        }
-    }
 
-    public static void startGetFeature(final String name) {
+    public static void startGetFeature(final List<FacePictures> facePictures) {
         new Thread(new Runnable() {
             @Override
             public void run() {
                 Log.d(TAG, "开始人脸提取");
                 //提取人脸数据
-                Utils.startToSaveFeature(name, Utils.getFaceImagePath());
+                Utils.startToSaveFeature(facePictures);
             }
         }).start();
     }
 
-    private static void startToSaveFeature(String name, String path) {
+    public static void startGetFeatureFromPath() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, "开始人脸提取");
+                //提取人脸数据
+                Utils.startToSaveFeature(getFaceImageList(getFaceImagePath(), "家庭成员"));
+            }
+        }).start();
+    }
+
+    private static void startToSaveFeature(List<FacePictures> facePictures) {
         Log.d(TAG, "进入人脸提取");
-        if (path == null) {
+        if (facePictures == null) {
             return;
         }
         ContrastManager feature = ContrastManager.getInstance();
         feature.setSwitchContrast(true);
-        ArrayList<FaceDatabase> faceData = feature.getFRToExtractFeature(name, path);
-        if (faceData == null || faceData.size() == 0) {
+        ArrayList<FaceFRBean> faceDatas = feature.ObtainPicturesFeature(facePictures);
+        if (faceDatas == null || faceDatas.size() == 0) {
             return;
         }
-
-        ContrastManager features = ContrastManager.getInstance();
-        features.addFamilyFaceFeature(faceData);
-        for (int i = 0; i < faceData.size(); i++) {
-            Log.d(TAG, "识别到 name - " + faceData.get(i).name + " 的人脸数据" + i);
-            saveOrUpdateFaceData(name, faceData.get(i).direction, faceData.get(i).face);
-            Log.d(TAG, "添加 " + name + " 的人脸数据 到视频识别队列中");
-        }
-        Log.d(TAG, "完成识别 " + name + " 的人脸数据");
+        //添加到识别队列
+        feature.addFamilyFaceFeature(faceDatas);
+        //保存数据库
+        MediaStorageManager mediaStorageManager = MediaStorageManager.getInstance();
+        mediaStorageManager.saveFaceData(faceDatas);
     }
 
-    /**
-     * 设置重点关注
-     *
-     * @param name
-     */
-    public void setFocusFaceData(String name) {
-        List<FaceDatabase> faceDatabaseList = SQLite.select()
-                .from(FaceDatabase.class)
-                .where(FaceDatabase_Table.name.eq(name))
-                .queryList();
-        if (faceDatabaseList.size() > 0) {
-            SQLite.update(FaceDatabase.class)
-                    .set(FaceDatabase_Table.focus.is(true))
-                    .where(FaceDatabase_Table.name.eq(name)).execute();
-        }
-    }
-
-    /**
-     * 删除人脸数据
-     *
-     * @param name
-     */
-    public void deleteFaceData(String name) {
-        List<FaceDatabase> faceDatabases = SQLite.select()
-                .from(FaceDatabase.class)
-                .where(FaceDatabase_Table.name.eq(name))
-                .queryList();
-        if (faceDatabases != null && faceDatabases.size() > 0) {
-            SQLite.delete()
-                    .from(FaceDatabase.class)
-                    .where(FaceDatabase_Table.name.eq(name))
-                    .execute();
-        }
-    }
-
-    /**
-     * 删除重点关注人员
-     *
-     * @param name
-     */
-    public void deleteFocusFaceData(String name) {
-        List<FaceDatabase> faceDatabases = SQLite.select()
-                .from(FaceDatabase.class)
-                .where(FaceDatabase_Table.name.eq(name))
-                .queryList();
-        if (faceDatabases != null && faceDatabases.size() > 0) {
-            SQLite.update(FaceDatabase.class)
-                    .set(FaceDatabase_Table.focus.is(false))
-                    .where(FaceDatabase_Table.name.eq(name))
-                    .execute();
-        }
-    }
-
-    /**
-     * 获取所有的人脸数据
-     *
-     * @return 所有保存的人脸数据
-     */
-    public static List<FaceDatabase> getAllFaceData() {
-        List<FaceDatabase> faceDatabaseList = SQLite.select()
-                .from(FaceDatabase.class)
-                .queryList();
-        if (faceDatabaseList.size() == 0) {
-            return null;
-        }
-        return faceDatabaseList;
-    }
-
-    /**
-     * 获取所有的重点关注人脸数据
-     *
-     * @return 所有重点关注的人脸数据
-     */
-    public static List<FaceDatabase> getFocusFaceData() {
-        List<FaceDatabase> faceDatabaseList = SQLite.select()
-                .from(FaceDatabase.class)
-                .where(FaceDatabase_Table.focus.is(true))
-                .queryList();
-        if (faceDatabaseList.size() == 0) {
-            return null;
-        }
-        return faceDatabaseList;
-    }
 
     public static File getFacePictureFile(String fileName) {
         //SD卡 DCIM目录
@@ -234,4 +142,137 @@ public class Utils {
         return time;
     }
 
+    public static void createImage(String imagePath, ByteBuffer data, int width, int height) {
+        try {
+            byte[] imageData = new byte[data.remaining()];
+            data.get(imageData, 0, imageData.length);
+            File file = new File(imagePath);
+            FileOutputStream outputStream = new FileOutputStream(file);
+
+            YuvImage image = new YuvImage(imageData, ImageFormat.NV21, width, height, null);
+            image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    /**
+     * 通过客户端的传过来的一组人脸图片 都转换为NV21
+     *
+     * @param facePath 图片文件夹路径
+     * @return
+     */
+    private static List<FacePictures> getFaceImageList(String facePath, String name) {
+        File file = new File(facePath);
+        List<FacePictures> facePictures = new ArrayList<>();
+        if (file.exists()) {
+            File[] files = file.listFiles();
+            if (files.length == 0) {
+                return null;
+            }
+            for (File file1 : files) {
+                String fileName = file1.getName();
+                if (isImage(fileName)) {
+                    Log.d(TAG, "Face image path --> " + facePath + "/" + fileName);
+                    facePictures.add(getFaceImage(facePath + "/" + fileName, name));
+                }
+            }
+            if (facePictures.size() > 0) {
+                file.delete();
+                return facePictures;
+            }
+        }
+
+        return null;
+    }
+
+    //转换照片格式 NV21
+    private static FacePictures getFaceImage(String path, String name) {
+        FacePictures facePIC;
+        try {
+            Bitmap res;
+            Log.d(TAG, "decodeImage  path = " + path);
+            ExifInterface exif = new ExifInterface(path);
+            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+
+            BitmapFactory.Options op = new BitmapFactory.Options();
+            op.inSampleSize = 4;
+            op.inJustDecodeBounds = false;
+            //op.inMutable = true;
+            res = BitmapFactory.decodeFile(path, op);
+            //rotate and scale.
+            Matrix matrix = new Matrix();
+
+            Log.d(TAG, "PIC orientation >> " + orientation);
+
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_90) {
+                matrix.postRotate(90);
+            } else if (orientation == ExifInterface.ORIENTATION_ROTATE_180) {
+                matrix.postRotate(180);
+            } else if (orientation == ExifInterface.ORIENTATION_ROTATE_270) {
+                matrix.postRotate(270);
+            }
+
+            Bitmap temp = Bitmap.createBitmap(res, 0, 0, res.getWidth(), res.getHeight(), matrix, true);
+            Log.d(TAG, "check target Image:" + temp.getWidth() + "X" + temp.getHeight());
+
+//            if (!temp.equals(res)) {
+//                res.recycle();
+//            }
+
+            byte[] data = new byte[temp.getWidth() * temp.getHeight() * 3 / 2];
+            ImageConverter convert = new ImageConverter();
+            convert.initial(temp.getWidth(), temp.getHeight(), ImageConverter.CP_PAF_NV21);
+            if (convert.convert(temp, data)) {
+                Log.d(TAG, "convert <<path>> ok! " + path);
+            }
+            convert.destroy();
+            facePIC = new FacePictures();
+            facePIC.setNV21(data);
+            facePIC.setName(name);
+            facePIC.setDirection(path);
+            facePIC.setWidth(temp.getWidth());
+            facePIC.setHigh(exeHigh(temp.getHeight()));
+            return facePIC;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static FacePictures getFaceImage(byte[] picture, String name, String direction) {
+        FacePictures facePIC;
+        Bitmap temp = BitmapFactory.decodeByteArray(picture, 0, picture.length);
+        byte[] data = new byte[temp.getWidth() * temp.getHeight() * 3 / 2];
+        ImageConverter convert = new ImageConverter();
+        convert.initial(temp.getWidth(), temp.getHeight(), ImageConverter.CP_PAF_NV21);
+        if (convert.convert(temp, data)) {
+            Log.d(TAG, "convert <<picture byte[]>> ok! ");
+        }
+        convert.destroy();
+        facePIC = new FacePictures();
+        facePIC.setNV21(data);
+        facePIC.setName(name);
+        facePIC.setDirection(direction);
+        facePIC.setWidth(temp.getWidth());
+        facePIC.setHigh(exeHigh(temp.getHeight()));
+        return facePIC;
+    }
+
+    //资源的High不能为奇数，这是ArcSoft的规定。需要处理一下
+    private static int exeHigh(int high) {
+        if (high / 2 == 1) {
+            return high + 1;
+        }
+        return high;
+    }
+
+    private static boolean isImage(String fileName) {
+        if (fileName == null || fileName.length() < 4) {
+            return false;
+        }
+        String fileType = fileName.substring(fileName.length() - 3, fileName.length());
+        return fileType.equals("jpg") || fileType.equals("png") || fileType.equals("gif") || fileType.equals("tif") || fileType.equals("bmp");
+    }
 }
