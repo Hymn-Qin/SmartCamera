@@ -191,10 +191,10 @@ public class FeatureExtractManager {
     /***
      * 识别文件夹下的所有图片的人脸信息 并保存
      */
-    public ArrayList<FaceDatabase> getFRToExtractFeature() {
+    public ArrayList<FaceFRBean> getFRToExtractFeature() {
         InitFaceFeatureManager();
         List<FacePictures> facePicCacheList = getFaceImageList(faceImagePath);
-        ArrayList<FaceDatabase> faceDataList = new ArrayList<>();
+        ArrayList<FaceFRBean> faceDataList = new ArrayList<>();
         if (facePicCacheList == null || facePicCacheList.size() == 0) {
             Log.d(TAG, "  facePicCacheList is null !!  pls help to check it !!");
             return null;//獲取人臉失敗
@@ -232,10 +232,10 @@ public class FeatureExtractManager {
                     continue;
                 }
                 byte[] faceData = face.getFeatureData();//人脸数据
-                FaceDatabase faceDataBean = new FaceDatabase();
-                faceDataBean.face = faceData;
-                faceDataBean.name = facePIC.getName();
-                faceDataBean.direction = facePIC.getFileName();
+                FaceFRBean faceDataBean = new FaceFRBean();
+                faceDataBean.setAFRFace(new AFR_FSDKFace(faceData));
+                faceDataBean.setmName(facePIC.getName());
+                faceDataBean.setmDirection(i);
                 faceDataList.add(faceDataBean);
                 Log.d(TAG, "获取到人脸数据 name >> " + facePIC.getName());
             }

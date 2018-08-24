@@ -1,30 +1,16 @@
 package com.zzdc.abb.smartcamera.controller;
 
-import android.graphics.Bitmap;
-import android.graphics.ImageFormat;
-import android.graphics.Rect;
-import android.graphics.YuvImage;
 import android.media.MediaCodec;
-import android.media.MediaExtractor;
 import android.media.MediaFormat;
-import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
-import android.os.Environment;
 import android.util.Log;
 
 import com.raizlabs.android.dbflow.sql.language.SQLite;
-import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData;
 import com.zzdc.abb.smartcamera.FaceFeature.AlertVideoData_Table;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
-import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.util.BufferPool;
-import com.zzdc.abb.smartcamera.util.LogTool;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
