@@ -1,10 +1,6 @@
 package com.zzdc.abb.smartcamera.FaceFeature;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.graphics.Rect;
-import android.media.ExifInterface;
 import android.util.Log;
 import com.arcsoft.facedetection.AFD_FSDKEngine;
 import com.arcsoft.facedetection.AFD_FSDKError;
@@ -16,13 +12,9 @@ import com.arcsoft.facerecognition.AFR_FSDKMatching;
 import com.arcsoft.facetracking.AFT_FSDKEngine;
 import com.arcsoft.facetracking.AFT_FSDKError;
 import com.arcsoft.facetracking.AFT_FSDKFace;
-import com.guo.android_extend.image.ImageConverter;
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
-import java.io.File;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -314,7 +306,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
             contrastFaceFeature(faceData, itemRect, degree, width, height);
         }
         if (onContrastListener != null) {
-            onContrastListener.onContrastRects(rectList);
+            onContrastListener.onContrastRectList(rectList);
 
         }
 

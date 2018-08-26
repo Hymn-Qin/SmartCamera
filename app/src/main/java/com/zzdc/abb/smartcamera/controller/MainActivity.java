@@ -365,8 +365,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             VideoGather.getInstance().registerVideoRawDataListener(contrastManager);
             contrastManager.onContrasManager(new OnContrastListener() {
                 @Override
-                public void onContrastRects(List<Rect> rects) {
-                    Log.d("qxj", "--------get face rects--------- >> " + rects.size());
+                public void onContrastRectList(List<Rect> rectList) {
+                    Log.d("qxj", "--------get face rects--------- >> " + rectList.size());
                 }
 
                 @Override
@@ -384,6 +384,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }
             });
+        }
+
+        if (mAplicationSetting.getSystemFocusSetting()) {
+
         }
     }
 

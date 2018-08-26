@@ -120,43 +120,6 @@ public class Utils {
         }
         return tmpPath;
     }
-
-
-    public static String timeNow() {
-        //时间System.currentTimeMillis()
-        @SuppressLint("SimpleDateFormat")
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");// HH:mm:ss
-        // 获取当前时间
-        Date date = new Date(System.currentTimeMillis());
-        String time = simpleDateFormat.format(date);
-        return time;
-    }
-
-    public static String timeNow(long times) {
-        //时间System.currentTimeMillis()
-        @SuppressLint("SimpleDateFormat")
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");// HH:mm:ss
-        // 获取当前时间
-        Date date = new Date(times);
-        String time = simpleDateFormat.format(date);
-        return time;
-    }
-
-    public static void createImage(String imagePath, ByteBuffer data, int width, int height) {
-        try {
-            byte[] imageData = new byte[data.remaining()];
-            data.get(imageData, 0, imageData.length);
-            File file = new File(imagePath);
-            FileOutputStream outputStream = new FileOutputStream(file);
-
-            YuvImage image = new YuvImage(imageData, ImageFormat.NV21, width, height, null);
-            image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
-    }
-
     /**
      * 通过客户端的传过来的一组人脸图片 都转换为NV21
      *

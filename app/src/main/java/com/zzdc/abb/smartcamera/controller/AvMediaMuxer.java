@@ -5,6 +5,7 @@ import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.util.Log;
 
+import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
@@ -95,6 +96,10 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                     startCreate = true;
                     tmpMediaFile = MediaStorageManager.getInstance().generateWarningMediaFileName();
                     imageFile = MediaStorageManager.getInstance().generateWarningImageFileName(tmpMediaFile);
+                    PictureProductManager productManager = PictureProductManager.getInstance();
+                    VideoGather.getInstance().registerVideoRawDataListener(productManager);
+                    productManager.startCreatePicture(imageFile, true);
+                    VideoGather.getInstance().unregisterVideoRawDataListener(productManager);
                     break;
             }
 

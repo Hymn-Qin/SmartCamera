@@ -14,6 +14,8 @@ public class ApplicationSetting {
     //camera的姿态
     private static final String POSE = "POSE";
 
+    private static final String IS_TO_START_FOCUS = "FOCUS";
+
     private static final String IS_TO_START_CONTRAST = "CONTRAST";
     private static ApplicationSetting mAplicationSetting = new ApplicationSetting();
     private Context mContext;
@@ -65,6 +67,21 @@ public class ApplicationSetting {
         SharedPreferences preference = mContext.getSharedPreferences(PREFERENCE, Context.MODE_PRIVATE);
         SharedPreferences.Editor edit = preference.edit();
         edit.putBoolean(IS_TO_START_CONTRAST, aIsEnable);
+        edit.apply();
+    }
+
+    public  boolean getSystemFocusSetting(){
+        SharedPreferences preference = mContext.getSharedPreferences(PREFERENCE, Context.MODE_PRIVATE);
+        boolean monitorStatus = preference.getBoolean(IS_TO_START_FOCUS, true);
+        LogTool.d(TAG,"Get focus status from server : "+monitorStatus);
+        return monitorStatus;
+    }
+
+    public void setSystemFocusSetting(boolean aIsEnable){
+        LogTool.d(TAG,"User set focus status to server : "+aIsEnable);
+        SharedPreferences preference = mContext.getSharedPreferences(PREFERENCE, Context.MODE_PRIVATE);
+        SharedPreferences.Editor edit = preference.edit();
+        edit.putBoolean(IS_TO_START_FOCUS, aIsEnable);
         edit.apply();
     }
 }
