@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Rect;
 import android.media.AudioManager;
+import android.net.ParseException;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,6 +33,7 @@ import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
+import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
@@ -50,6 +52,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import static java.lang.Thread.sleep;
 
@@ -387,7 +393,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
 
         if (mAplicationSetting.getSystemFocusSetting()) {
-
+            startCreatePicture();
         }
     }
 
@@ -395,6 +401,48 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (!mAplicationSetting.getSystemContrastSetting()) {
             ContrastManager contrastManager = ContrastManager.getInstance();
             contrastManager.setSwitchContrast(false);
+        }
+        if (!mAplicationSetting.getSystemFocusSetting()) {
+            stopPictureCreate();
+        }
+    }
+
+    private ScheduledExecutorService scheduler = null;
+
+    private void startCreatePicture() {
+        try {
+            scheduler = Executors.newScheduledThreadPool(1);
+            synchronized (scheduler) {
+                scheduler.scheduleAtFixedRate(TodoOperation, 10 * 1000, 30 * 60 * 1000, TimeUnit.MILLISECONDS);//周期
+            }
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Semaphore semaphore = new Semaphore(1);
+    private final Runnable TodoOperation = new Runnable() {
+        public void run() {
+            try {
+                semaphore.acquire();
+                String imageFile = MediaStorageManager.getInstance().generateFocusImageFileName();
+                PictureProductManager productManager = PictureProductManager.getInstance();
+                VideoGather.getInstance().registerVideoRawDataListener(productManager);
+                productManager.startCreatePicture(imageFile, true);
+                VideoGather.getInstance().unregisterVideoRawDataListener(productManager);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                semaphore.release();
+            }
+
+        }
+    };
+
+    private void stopPictureCreate() {
+        if (scheduler != null) {
+            scheduler.shutdown();
+            scheduler = null;
         }
     }
 
