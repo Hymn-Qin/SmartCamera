@@ -5,7 +5,6 @@ import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.util.Log;
 
-import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.util.BufferPool;
 import com.zzdc.abb.smartcamera.util.LogTool;
@@ -96,10 +95,7 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                     startCreate = true;
                     tmpMediaFile = MediaStorageManager.getInstance().generateWarningMediaFileName();
                     imageFile = MediaStorageManager.getInstance().generateWarningImageFileName(tmpMediaFile);
-                    PictureProductManager productManager = PictureProductManager.getInstance();
-                    VideoGather.getInstance().registerVideoRawDataListener(productManager);
-                    productManager.startCreatePicture(imageFile, true);
-                    VideoGather.getInstance().unregisterVideoRawDataListener(productManager);
+                    Utils.startToCreatePicture(imageFile);
                     break;
             }
 
@@ -183,12 +179,6 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
             mLastVideoFrameTimestamp = buf.getBufferInfo().presentationTimeUs;
             mMuxerDatas.offer(tmpPPSBuffer);
             isPPSAdded = true;
-//            if (types.equals("Alert") && startCreate && imageFile != null) {
-//                startCreate = false;
-//                Log.d("qxj", "start create first image");
-//                Utils.createImage(imageFile, tmpPPSBuffer.getByteBuffer(), 1920, 1080);
-//                imageFile = null;
-//            }
         }
 
         if (!isPPSAdded)

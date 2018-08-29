@@ -14,6 +14,7 @@ import com.guo.android_extend.image.ImageConverter;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
 import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.MediaStorageManager;
+import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -37,7 +38,7 @@ public class Utils {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Log.d(TAG, "开始人脸提取");
+                Log.d(TAG, "qxj--------开始人脸提取");
                 //提取人脸数据
                 Utils.startToSaveFeature(facePictures);
             }
@@ -48,15 +49,21 @@ public class Utils {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Log.d(TAG, "开始人脸提取");
+                Log.d(TAG, "qxj--------开始人脸提取");
                 //提取人脸数据
                 Utils.startToSaveFeature(getFaceImageList(getFaceImagePath(), "家庭成员"));
             }
         }).start();
     }
 
+    public static void startToCreatePicture(String imagePath) {
+        LogTool.d(TAG, "qxj--------Create Picture, this name : " + imagePath);
+        PictureProduceManager produceManager = PictureProduceManager.getInstance();
+        produceManager.startCreatePicture(imagePath, true);
+        VideoGather.getInstance().registerVideoRawDataListener(produceManager);
+    }
     private static void startToSaveFeature(List<FacePictures> facePictures) {
-        Log.d(TAG, "进入人脸提取");
+        Log.d(TAG, "qxj--------进入人脸提取");
         if (facePictures == null) {
             return;
         }
@@ -73,26 +80,6 @@ public class Utils {
         mediaStorageManager.saveFaceData(faceDatas);
     }
 
-
-    public static File getFacePictureFile(String fileName) {
-        //SD卡 DCIM目录
-        String tmpDir = getFaceImagePath();
-        if (tmpDir != null) {
-            // TODO
-            try {
-                String imagePath = fileName + ".jpg";
-                File file = new File(tmpDir, imagePath);
-                if (!file.exists()) {
-                    file.getParentFile().mkdirs();
-                    file.createNewFile();
-                }
-                return file;
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return null;
-    }
 
     /**
      * 创建图片保存路径
@@ -120,6 +107,7 @@ public class Utils {
         }
         return tmpPath;
     }
+
     /**
      * 通过客户端的传过来的一组人脸图片 都转换为NV21
      *

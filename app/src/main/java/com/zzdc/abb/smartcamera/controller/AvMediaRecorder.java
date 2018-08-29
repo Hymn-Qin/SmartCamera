@@ -10,14 +10,14 @@ import android.os.Message;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
-import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import com.zzdc.abb.smartcamera.util.SmartCameraApplication;
 
 
+
 public class AvMediaRecorder {
     private static final String TAG = AvMediaRecorder.class.getSimpleName();
-    private static AvMediaRecorder mRecorder = new AvMediaRecorder();
+//    private static AvMediaRecorder mRecorder = new AvMediaRecorder();
 
     private AudioGather mAudioGather;
     private VideoGather mVideoGather;
@@ -32,17 +32,16 @@ public class AvMediaRecorder {
     private static final int WAIT_TO_START = 203;
     private static final int CHECK_STORAGE = 204;
     private static int SD_MEM_THRESHOLD = 300; //SD card mem threshold
-    public boolean ABBassistantRuning = true;
-    private SDCardBroadcastReceiver mReceiver;
-    private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
+	private SDCardBroadcastReceiver mReceiver;
+	private boolean mIsMonitor = false; //monitor status ，true is working；false ，not work；
 
-    private Handler mHandler = new Handler() {
+    private Handler mHandler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
             switch (msg.what) {
                 case START_RECORD:
-                    if (mIsMonitor) {
+                    if (mIsMonitor){
                         startRecord();
                     }
                     break;
@@ -50,7 +49,7 @@ public class AvMediaRecorder {
                     stopRecord();
                     break;
                 case WAIT_TO_START:
-                    if (mIsMonitor) {
+                    if(mIsMonitor){
                         waitForStart();
                     }
                     break;
@@ -60,15 +59,15 @@ public class AvMediaRecorder {
         }
     };
 
-    public class SDCardBroadcastReceiver extends BroadcastReceiver {
+    public class SDCardBroadcastReceiver extends BroadcastReceiver{
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)) {
-                LogTool.d(TAG, "Intent.ACTION_MEDIA_EJECT");
+            String action = intent.getAction();
+            LogTool.d(TAG,"SDCardBroadcastReceiver intent.getAction = "+action);
+            if (null != action && action.equalsIgnoreCase(Intent.ACTION_MEDIA_EJECT)){
                 stopRecord();
                 MediaStorageManager.getInstance().stop();
-            } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)) {
-                Log.d(TAG, "Intent.ACTION_MEDIA_MOUNTED");
+            } else if (null != action && action.equalsIgnoreCase(Intent.ACTION_MEDIA_MOUNTED)){
                 MediaStorageManager.getInstance().start();
                 startRecord();
             }
@@ -78,12 +77,11 @@ public class AvMediaRecorder {
     public void setmActivity(Activity mActivity) {
         this.mActivity = mActivity;
     }
-
     public void setmHolder(SurfaceHolder mHolder) {
         this.mHolder = mHolder;
     }
 
-    private AvMediaRecorder() {
+    public AvMediaRecorder() {
         mAudioGather = AudioGather.getInstance();
         mAudioEncoder = AudioEncoder.getInstance();
 
@@ -94,21 +92,24 @@ public class AvMediaRecorder {
 
     }
 
-    public void init() {
-        if (!mAudioGather.AudioGatherRuning) {
+    public void initAudio() {
+        LogTool.d(TAG,"Init audio components start.");
+        if(!mAudioGather.AudioGatherRuning) {
             mAudioGather.SetAudioSourceTypeForMonitor();
             mAudioGather.prepareAudioRecord();
         }
-
         mAudioEncoder.init();
         mAudioGather.registerAudioRawDataListener(mPCMAudioDataTransfer);
-        if (!mVideoGather.mIsPreviewing) {
-            mVideoGather.doOpenCamera();
-            mVideoGather.doStartPreview(mActivity, mHolder);
-        }
-        setVideoParameter(mVideoGather.getPreWidth(), mVideoGather.getPreHeight(), mVideoGather.getFrameRate());
-        mVideoEncoder.init();
+    }
 
+    public void initVideo() {
+        LogTool.d(TAG,"Init video components start.");
+        if(!mVideoGather.mIsPreviewing){
+            mVideoGather.doOpenCamera();
+            mVideoGather.doStartPreview(mActivity,mHolder);
+        }
+//        setVideoParameter(mVideoGather.getPreWidth(),mVideoGather.getPreHeight(),mVideoGather.getFrameRate());
+        mVideoEncoder.init();
         mReceiver = new SDCardBroadcastReceiver();
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_EJECT);
@@ -117,31 +118,75 @@ public class AvMediaRecorder {
         SmartCameraApplication.getContext().registerReceiver(mReceiver, filter);
     }
 
-    public void avMediaRecorderStart() {
-        if (!mAudioGather.AudioGatherRuning) {
+//    public void init() {
+//        if(!mAudioGather.AudioGatherRuning) {
+//            mAudioGather.SetAudioSourceTypeForMonitor();
+//            mAudioGather.prepareAudioRecord();
+//        }
+//
+//        mAudioEncoder.init();
+//        mAudioGather.registerAudioRawDataListener(mPCMAudioDataTransfer);
+//        if(!mVideoGather.mIsPreviewing){
+//            mVideoGather.doOpenCamera();
+//            mVideoGather.doStartPreview(mActivity,mHolder);
+//        }
+//        setVideoParameter(mVideoGather.getPreWidth(),mVideoGather.getPreHeight(),mVideoGather.getFrameRate());
+//        mVideoEncoder.init();
+//
+//        mReceiver = new SDCardBroadcastReceiver();
+//        IntentFilter filter = new IntentFilter();
+//        filter.addAction(Intent.ACTION_MEDIA_EJECT);
+//        filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
+//        filter.addDataScheme("file");
+//        SmartCameraApplication.getContext().registerReceiver(mReceiver, filter);
+//    }
+
+    public void avMediaRecorderStartAudio() {
+        LogTool.d(TAG,"Set audio components to work.");
+        if(!mAudioGather.AudioGatherRuning){
             mAudioGather.startRecord();
         }
-        if (!mVideoEncoder.isRunning()) {
-            mVideoEncoder.start();
-        }
-        if (!mAudioEncoder.isRunning()) {
+
+        if(!mAudioEncoder.isRunning()) {
             mAudioEncoder.start();
         }
-        //开始人脸识别
-//        startVideoFaceContrast();
-
-        if (MediaStorageManager.getInstance().isReady()) {
-            startRecord();
-        } else {
-            Log.d(TAG, "MediaStorageManager not ready");
-        }
-        mIsMonitor = true;
     }
 
-    public void avMediaRecorderStop() {
-        Log.d(TAG, "avMediaRecorderStop");
-        mIsMonitor = false;
-        if (mMuxer != null) {
+    public void avMediaRecorderStartVideo() {
+        LogTool.d(TAG,"Set video components to work.");
+        if(!mVideoEncoder.isRunning()) {
+            if (mVideoEncoder.start()) {
+                if(MediaStorageManager.getInstance().isReady()){
+                    startRecord();
+                }else {
+                    Log.d(TAG,"MediaStorageManager not ready");
+                }
+                mIsMonitor = true;
+            }
+        }
+    }
+
+//    public void avMediaRecorderStart(){
+//        if(!mAudioGather.AudioGatherRuning){
+//            mAudioGather.startRecord();
+//        }
+//        if(!mVideoEncoder.isRunning()) {
+//            mVideoEncoder.start();
+//        }
+//        if(!mAudioEncoder.isRunning()) {
+//            mAudioEncoder.start();
+//        }
+//        if(MediaStorageManager.getInstance().isReady()){
+//            startRecord();
+//        }else {
+//            Log.d(TAG,"MediaStorageManager not ready");
+//        }
+//        mIsMonitor = true;
+//    }
+
+    public void avMediaRecorderStopVideo() {
+        Log.d(TAG,"avMediaRecorderStop");
+        if(mMuxer != null){
             stopRecord();
             stopAlertRecord();
             mHandler.removeCallbacksAndMessages(null);
@@ -149,60 +194,72 @@ public class AvMediaRecorder {
         SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
         mVideoEncoder.stop();
 
-        new Handler().postDelayed(new Runnable() {
+        new Handler().postDelayed(new Runnable(){
+            public void run() {
+                mVideoGather.doStopCamera();
+                mVideoGather.unregisterVideoRawDataListener(mVideoEncoder);
+            }
+        }, 300);
+        mIsMonitor = false;
+    }
+
+    public void avMediaRecorderStopVideoAndAudio(){
+        Log.d(TAG,"avMediaRecorderStop");
+        mIsMonitor = false;
+        if(mMuxer != null){
+            stopRecord();
+            stopAlertRecord();
+            mHandler.removeCallbacksAndMessages(null);
+        }
+        SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
+        mVideoEncoder.stop();
+
+        new Handler().postDelayed(new Runnable(){
             public void run() {
                 mVideoGather.doStopCamera();
                 mVideoGather.unregisterVideoRawDataListener(mVideoEncoder);
             }
         }, 300);
         mAudioEncoder.stop();
-        new Handler().postDelayed(new Runnable() {
+        new Handler().postDelayed(new Runnable(){
             public void run() {
-                if (!ABBassistantRuning) {
-                    mAudioGather.stopRecord();
-                    mAudioGather.unregisterAudioRawDataListener(mPCMAudioDataTransfer);
-                    mAudioGather.release();
-
-                }
-                Log.d(TAG, "mAudioGather stop transfer.");
-
+                mAudioGather.stopRecord();
+                mAudioGather.unregisterAudioRawDataListener(mPCMAudioDataTransfer);
+                mAudioGather.release();
+            Log.d(TAG,"mAudioGather stop transfer.");
             }
         }, 300);
-
-
     }
 
+//    private int mWidth;
+//    private int mHeight;
+//    private int mFrame;
+//    public void setVideoParameter(int width, int height, int frame) {
+//        mWidth = width;
+//        mHeight = height;
+//        mFrame = frame;
+//    }
 
-    private int mWidth;
-    private int mHeight;
-    private int mFrame;
+//    public static AvMediaRecorder getInstance() {
+//        return mRecorder;
+//    }
 
-    public void setVideoParameter(int width, int height, int frame) {
-        mWidth = width;
-        mHeight = height;
-        mFrame = frame;
-    }
-
-    public static AvMediaRecorder getInstance() {
-        return mRecorder;
-    }
-
-    private void startRecord() {
-        Log.d(TAG, "startRecord");
-        if (!MediaStorageManager.getInstance().isReady()) {
-            Log.d(TAG, "MediaStorageManager hasn't ready");
+    private void startRecord(){
+        Log.d(TAG ,"startRecord");
+        if(!MediaStorageManager.getInstance().isReady()){
+            Log.d(TAG,"MediaStorageManager hasn't ready");
             return;
         }
         mMuxer = new AvMediaMuxer("History");
         waitForStart();
     }
 
-    private void waitForStart() {
+    private void waitForStart(){
         if (MediaStorageManager.getInstance().isReady()) {
-            if (mMuxer == null) {
+            if(mMuxer == null){
                 return;
             }
-            if (!mMuxer.startMediaMuxer()) {
+            if(!mMuxer.startMediaMuxer()){
                 mHandler.sendEmptyMessageDelayed(WAIT_TO_START, 1000);
             } else {
                 mHandler.sendEmptyMessageDelayed(STOP_RECORD, 5 * 60 * 1000);
@@ -210,15 +267,15 @@ public class AvMediaRecorder {
         }
     }
 
-    private void stopRecord() {
-        Log.d(TAG, " stopRecord ");
-        if (mMuxer != null) {
+    private void stopRecord(){
+        Log.d(TAG ," stopRecord ");
+        if(mMuxer!= null){
             mMuxer.stopMediaMuxer();
             mMuxer = null;
         }
 
-        if (!MediaStorageManager.getInstance().isReady()) {
-            Log.d(TAG, "MediaStorageManager hasn't ready");
+        if(!MediaStorageManager.getInstance().isReady()){
+            Log.d(TAG,"MediaStorageManager hasn't ready");
             return;
         }
 /*        MediaScannerConnection.scanFile(SmartCameraApplication.getContext(), new String[]{mSDCardBussiness.getSDCardVideoRootPath()}, null, new MediaScannerConnection.OnScanCompletedListener() {
@@ -301,4 +358,3 @@ public class AvMediaRecorder {
         }
     }
 }
-

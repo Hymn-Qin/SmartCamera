@@ -61,26 +61,26 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
     public void onContrasManager(OnContrastListener onContrastListener) {
         this.onContrastListener = onContrastListener;
     }
-    private Thread contrastThread = new Thread("Thread-contrastThread"){
-        @Override
-        public void run() {
-            super.run();
-            Log.d(TAG, "start contrastThread data");
-            while (isContrast) {
-                byte[] videoData = null;
-                try {
-                    videoData = videoDatas.take();
-                    Log.d(TAG, "data contrasting ");
-                    if (videoData != null) {
-                        startContrastFeature(videoData, width, height);//设别
-                    }
-
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    };
+//    private Thread contrastThread = new Thread("Thread-contrastThread"){
+//        @Override
+//        public void run() {
+//            super.run();
+//            Log.d(TAG, "start contrastThread data");
+//            while (isContrast) {
+//                byte[] videoData = null;
+//                try {
+//                    videoData = videoDatas.take();
+//                    Log.d(TAG, "data contrasting ");
+//                    if (videoData != null) {
+//                        startContrastFeature(videoData, width, height);//设别
+//                    }
+//
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+//            }
+//        }
+//    };
 
     /**
      * 初始化人脸识别引擎 和 人脸比对引擎
@@ -94,7 +94,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
     /**
      * 注销人脸识别引擎 和 人脸提取引擎
      */
-    public void UninitFaceFeatureManager() {
+    private void UninitFaceFeatureManager() {
         if (AFD != null) {
             AFD.AFD_FSDK_UninitialFaceEngine();
         }
@@ -238,13 +238,16 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
 
     public void startContrast() {
         if (isContrast) {
-            contrastThread.start();
+//            contrastThread.start();
         }
     }
 
     @Override
     public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
-        videoDatas.offer(buf.getData());
+//        videoDatas.offer(buf.getData());
+        if (isContrast) {
+            startContrastFeature(buf.getData(), width, height);//设别
+        }
     }
 
     /**

@@ -40,6 +40,7 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     private Thread mInputThread;
     public volatile boolean videoEncoderLoop = false;
     public byte[] mPPS;
+    private static final int START_ENCODER = 100;
 
     public static ByteBuffer PPS_BUFFER;
     public static MediaCodec.BufferInfo PPS_BUFFER_INFO = new MediaCodec.BufferInfo();
@@ -56,6 +57,21 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
     }
 
     private VideoGather mVideoGather = null;
+
+    private Handler mStartEncoderHandler = new Handler(){
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case START_ENCODER:
+                    LogTool.d(TAG,"Start mediaCodec fail,restart it in Handler!!!");
+                    start();
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
 
     private HandlerThread mEncodeThread = new HandlerThread("Video encode thread");
     {
@@ -236,7 +252,7 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
 
         videoFormat = MediaFormat.createVideoFormat(VIDEO_MIME_TYPE, mWidth, mHeight);
         videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, mFps);
-        videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, (int)(mWidth * mHeight * 0.4));
+        videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, (int)(mWidth * mHeight * 0.8));
         videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, selectColorFormat(VIDEO_MIME_TYPE));
         videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
         Log.d(TAG, "Video format: " + videoFormat.toString());
@@ -244,7 +260,8 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         mEncodeHandler.sendEmptyMessage(1);
     }
 
-    public void start() {
+    public boolean start() {
+        boolean mediaCodecStartSuccess = false;
         if (mEncoder == null) {
             for (int i=0; i<10; i++) {
                 LogTool.w(TAG, "Sleep 1 second to wait the mEncoder created. i = " + i);
@@ -268,9 +285,17 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         mEncoder.setCallback(mEncodeCallback);
         mEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         try {
+            mediaCodecStartSuccess = true;
             mEncoder.start();
         } catch (Exception e) {
+            mediaCodecStartSuccess = false;
             LogTool.e(TAG,"Start mediaCodec failed!!! : ",e);
+        } finally {
+            LogTool.e(TAG,"mediaCodecStartSuccess = "+mediaCodecStartSuccess);
+            if(!mediaCodecStartSuccess) {
+                mStartEncoderHandler.sendEmptyMessageDelayed(START_ENCODER,1000);
+                return false;
+            }
         }
         mVideoGather.registerVideoRawDataListener(this);
         mEncoding = true;
@@ -278,7 +303,8 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
         mInputThread = new InputThread();
         videoEncoderLoop = true;
         mInputThread.start();
-        LogTool.w(TAG,"VideoEncoder start");
+        LogTool.w(TAG,"VideoEncoder start success.");
+        return true;
     }
 
     public void stop() {

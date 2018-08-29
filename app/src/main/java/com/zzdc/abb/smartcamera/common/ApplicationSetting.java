@@ -14,9 +14,10 @@ public class ApplicationSetting {
     //camera的姿态
     private static final String POSE = "POSE";
 
+    private static final String IS_TO_START_CONTRAST = "CONTRAST";
+
     private static final String IS_TO_START_FOCUS = "FOCUS";
 
-    private static final String IS_TO_START_CONTRAST = "CONTRAST";
     private static ApplicationSetting mAplicationSetting = new ApplicationSetting();
     private Context mContext;
 

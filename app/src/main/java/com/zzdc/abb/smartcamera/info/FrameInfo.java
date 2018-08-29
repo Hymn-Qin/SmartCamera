@@ -15,14 +15,14 @@ import java.util.List;
  *
  * */
 public class FrameInfo implements Serializable{
-    public final int dataLength = 64;
+    public final int dataLength = 112;
     public short codec_id;  //2byte
     public byte flags;  //1byte
     public byte cam_index;  //1byte
     public byte onlineNum;  //1byte
     public byte[] reserve1 = new byte[3];  //3byte
     public long timestamp;  //8byte
-    public byte[] mRects = new byte[48];  //48byte
+    public byte[] mRects = new byte[96];  //96byte
     byte[] result = new byte[dataLength];
 
     public byte[] parseContent() {
@@ -40,19 +40,19 @@ public class FrameInfo implements Serializable{
         System.arraycopy(paseOnLineNum, 0, result, 4, 1);
         System.arraycopy(reserve, 0, result, 5, 3);
         System.arraycopy(frameTime, 0, result, 8, 8);
-        System.arraycopy(rects, 0, result, 16, 48);
+        System.arraycopy(rects, 0, result, 16, 96);
         return result;
     }
 
     public FrameInfo parseByteArrayToFrameInfo (byte[] byteArray) {
-        FrameInfo frameInfo = null;
+        FrameInfo frameInfo = new FrameInfo();
         byte[] code = new byte[2];
         byte[] flag = new byte[1];
         byte[] camIndex = new byte[1];
         byte[] paseOnLineNum = new byte[1];
         byte[] reserve = new byte[3];
         byte[] frameTime = new byte[8];
-        byte[] rects = new byte[48];
+        byte[] rects = new byte[96];
         System.arraycopy(byteArray, 0, code, 0, 2);
         frameInfo.codec_id = Packet.byteArrayToShort_Little(code,0);
         System.arraycopy(byteArray, 2, flag, 0, 1);
@@ -65,7 +65,7 @@ public class FrameInfo implements Serializable{
         frameInfo.reserve1 = reserve;
         System.arraycopy(byteArray, 8, frameTime, 0, 8);
         frameInfo.timestamp = Packet.byteArrayToLong_Little(frameTime,0);
-        System.arraycopy(byteArray, 16, rects, 0, 48);
+        System.arraycopy(byteArray, 16, rects, 0, 96);
         frameInfo.mRects = rects;
 
         return frameInfo;

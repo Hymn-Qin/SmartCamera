@@ -32,7 +32,7 @@ public class PCMAudioDataTransfer implements AudioGather.AudioRawDataListener {
     //打开语音
     public static final int TELEPHONY_OFF_MODE = 5;
     private boolean isReady = false;
-    AudioData mAudioData = new AudioData();
+    private AudioData mAudioData = new AudioData();
     private PCMAudioDataTransfer(){
 
         init();
@@ -85,7 +85,7 @@ public class PCMAudioDataTransfer implements AudioGather.AudioRawDataListener {
 
 
 
-    public void sendPCMAudioData(AudioGather.AudioBuf buf){
+    private void sendPCMAudioData(AudioGather.AudioBuf buf){
         try {
 
             if (!isReady) {

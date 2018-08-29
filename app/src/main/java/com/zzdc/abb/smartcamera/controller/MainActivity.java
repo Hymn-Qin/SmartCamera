@@ -33,7 +33,6 @@ import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
-import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
@@ -65,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Button btnStart;
     private Button btnCall;
     private SurfacePreview mSurfacePreview;
-    private static boolean RecordRuning = false;
+    private boolean cameraRuning = false;
     private ApplicationSetting mAplicationSetting = null;
     private boolean mIsCmdComeFromOpenHotSpot = false;
     private TutkManager mTutk;
@@ -74,7 +73,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private OneKeyCallReciever mOneKeyCallReciever;
     private static final String ACTION_OPEN_HOT_SPOT = "com.foxconn.zzdc.broadcast.OPEN_HOT_SPOT";
     private static final String ACTION_STOP_CAMERA = "com.foxconn.zzdc.broadcast.STOP_CAMERA";
-    private static final String ACTION_START_CAMERA = "com.foxconn.zzdc.broadcast.START_CAMERA";
     private static final String ACTION_CAMERA_STATUS = "com.foxconn.zzdc.broadcast.camera";
     private static final String ACTION_CAMERA_ALERT = "com.foxconn.alert.camera.play";
     private boolean mIsEnableMonitor;
@@ -141,15 +139,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d(TAG, "Somebody wants to reset WIFI !!!");
                 finish();
                 mIsCmdComeFromOpenHotSpot = true;
-            } else if (intent.getAction().equalsIgnoreCase(ACTION_START_CAMERA)) {
-                Log.d(TAG, "Start camera after reset WIFI !!!");
-                if (mAplicationSetting.getSystemMonitorOKSetting()) {
-                    Log.d(TAG, "Now open camera from broadcast !!!");
-                    mAvMediaRecorder.init();
-                    mAvMediaRecorder.avMediaRecorderStart();
-                    RecordRuning = true;
-                }
-            }else if (intent.getAction().equalsIgnoreCase(ACTION_CAMERA_ALERT)) {
+            } else if (intent.getAction().equalsIgnoreCase(ACTION_CAMERA_ALERT)) {
                 String type = intent.getStringExtra("type");
                 String message = intent.getStringExtra("message");
                 Log.d(TAG, "get receive -- type = " + type + " message = " + message);
@@ -172,22 +162,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }else if (type.equals("Camera")) {
                     if (mAvMediaRecorder == null) {
-                        mAvMediaRecorder = AvMediaRecorder.getInstance();
+                        mAvMediaRecorder = new AvMediaRecorder();
                     }
                     if (message.equals("false")) {
                         if (mAplicationSetting.getSystemMonitorOKSetting()) {
-//                            mAplicationSetting.setSystemMonitorOKSetting(false);
-                            if (RecordRuning) {
-                                StopRecord();
+                            if (cameraRuning) {
+                                stopCamera();
                             }
                         }
 
                     } else if (message.equals("true")) {
 
                         if (!mAplicationSetting.getSystemMonitorOKSetting()) {
-//                            mAplicationSetting.setSystemMonitorOKSetting(true);
-                            if (!RecordRuning) {
-                                StartRecord();
+                            if (!cameraRuning) {
+                                startCamera();
                             }
                         }
                     }
@@ -220,7 +208,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        RecordRuning = false;
+        cameraRuning = false;
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main2);
@@ -229,7 +217,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         filter.addAction("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
         filter.addAction(ACTION_CAMERA_ALERT);
         filter.addAction(ACTION_OPEN_HOT_SPOT);
-        filter.addAction(ACTION_START_CAMERA);
         mOneKeyCallReciever = new OneKeyCallReciever();
         registerReceiver(mOneKeyCallReciever, filter);
 
@@ -273,7 +260,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         WindowUtils.addView(mSurfacePreview);
         if (mAvMediaRecorder == null) {
-            mAvMediaRecorder = AvMediaRecorder.getInstance();
+            mAvMediaRecorder = new AvMediaRecorder();
         }
         mAvMediaRecorder.setmActivity(this);
         mAvMediaRecorder.setmHolder(SurfacePreview.surfaceHolder);
@@ -328,31 +315,34 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private  void startRecordFirstTime() {
-        Log.d(TAG,"start record first time in MainActivity.");
-        if (mAplicationSetting.getSystemMonitorOKSetting()) {
-            mAvMediaRecorder.init();
-            mAvMediaRecorder.avMediaRecorderStart();
-            RecordRuning = true;
+        boolean cameraStatusInServer = mAplicationSetting.getSystemMonitorOKSetting();
+        mAvMediaRecorder.initAudio();
+        mAvMediaRecorder.avMediaRecorderStartAudio();
+        Log.d(TAG,"Start record when MainActivity start,and camera status in server = "+cameraStatusInServer);
+        if (cameraStatusInServer) {
+            mAvMediaRecorder.initVideo();
+            mAvMediaRecorder.avMediaRecorderStartVideo();
+            cameraRuning = true;
         }
-//        Utils.startGetFeatureFromPath();
         startContrast();
     }
 
-    public void StartRecord() {
+    public void startCamera() {
         if (!mAplicationSetting.getSystemMonitorOKSetting()) {
-            mAvMediaRecorder.init();
-            mAvMediaRecorder.avMediaRecorderStart();
-            RecordRuning = true;
+            mAvMediaRecorder.initVideo();
+            mAvMediaRecorder.avMediaRecorderStartVideo();
+            cameraRuning = true;
             mAplicationSetting.setSystemMonitorOKSetting(true);
             setCameraStatusToServer(true);
         }
     }
 
-    public void StopRecord() {
-        Log.d(TAG,"RecordRuning = "+RecordRuning);
-        if (mAplicationSetting.getSystemMonitorOKSetting()) {
-            mAvMediaRecorder.avMediaRecorderStop();
-            RecordRuning = false;
+    public void stopCamera() {
+        boolean cameraStatusInServer = mAplicationSetting.getSystemMonitorOKSetting();
+        Log.d(TAG,"Camera status in server = "+cameraStatusInServer);
+        if (cameraStatusInServer) {
+            mAvMediaRecorder.avMediaRecorderStopVideo();
+            cameraRuning = false;
             mAplicationSetting.setSystemMonitorOKSetting(false);
             setCameraStatusToServer(false);
         }
@@ -360,7 +350,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     public void startContrast() {
         if (mAplicationSetting.getSystemContrastSetting()) {
-            LogTool.d("qxj","startContrast()" + mAplicationSetting.getSystemContrastSetting());
+            LogTool.d(TAG,"startContrast()" + mAplicationSetting.getSystemContrastSetting());
             ContrastManager contrastManager = ContrastManager.getInstance();
             contrastManager.setContrastKey(FaceConfig.faceAPP_Id, FaceConfig.faceFD_Key, FaceConfig.faceFR_KEY, FaceConfig.faceFT_KEY)
                     .setContrastConfig(1920, 1080, FaceConfig.scale, FaceConfig.scaleFT, FaceConfig.maxFacesNUM, FaceConfig.maxContrastFacesNUM)
@@ -371,13 +361,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             VideoGather.getInstance().registerVideoRawDataListener(contrastManager);
             contrastManager.onContrasManager(new OnContrastListener() {
                 @Override
-                public void onContrastRectList(List<Rect> rectList) {
-                    Log.d("qxj", "--------get face rects--------- >> " + rectList.size());
+                public void onContrastRectList(List<Rect> rectLists) {
+                    Log.d(TAG, "qxj--------get face rectList, the size : " + rectLists.size());
                 }
 
                 @Override
                 public void onContrastSucceed(boolean focus, String identity) {
 
+                    if (focus) {
+                        LogTool.d(TAG, "qxj--------this face is focus, name : " + identity);
+                    }
                 }
 
                 @Override
@@ -403,20 +396,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             contrastManager.setSwitchContrast(false);
         }
         if (!mAplicationSetting.getSystemFocusSetting()) {
-            stopPictureCreate();
+            stopCreatePicture();
         }
     }
 
     private ScheduledExecutorService scheduler = null;
 
     private void startCreatePicture() {
+        LogTool.d(TAG, "qxj--------startCreatePicture()");
         try {
+            if (scheduler != null) {
+                scheduler.shutdown();
+                scheduler = null;
+            }
             scheduler = Executors.newScheduledThreadPool(1);
             synchronized (scheduler) {
-                scheduler.scheduleAtFixedRate(TodoOperation, 10 * 1000, 30 * 60 * 1000, TimeUnit.MILLISECONDS);//周期
+                scheduler.scheduleAtFixedRate(TodoOperation, 60 * 1000, 30 * 60 * 1000, TimeUnit.MILLISECONDS);//周期
             }
         } catch (ParseException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void stopCreatePicture() {
+        if (scheduler != null) {
+            scheduler.shutdown();
+            scheduler = null;
         }
     }
 
@@ -424,12 +429,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private final Runnable TodoOperation = new Runnable() {
         public void run() {
             try {
+                LogTool.d(TAG, "qxj--------start to Create Picture, now! ");
                 semaphore.acquire();
-                String imageFile = MediaStorageManager.getInstance().generateFocusImageFileName();
-                PictureProductManager productManager = PictureProductManager.getInstance();
-                VideoGather.getInstance().registerVideoRawDataListener(productManager);
-                productManager.startCreatePicture(imageFile, true);
-                VideoGather.getInstance().unregisterVideoRawDataListener(productManager);
+                MediaStorageManager mediaStorageManager = MediaStorageManager.getInstance();
+                if (mediaStorageManager.isReady()) {
+                    String imageFile = mediaStorageManager.generateFocusImageFileName();
+                    Utils.startToCreatePicture(imageFile);
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
@@ -439,13 +445,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
-    private void stopPictureCreate() {
-        if (scheduler != null) {
-            scheduler.shutdown();
-            scheduler = null;
-        }
-    }
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -454,9 +453,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if(mTutk!=null){
             mTutk.unInit();
         }
-        if (RecordRuning) {
-            RecordRuning = false;
-            mAvMediaRecorder.avMediaRecorderStop();
+        if (cameraRuning) {
+            cameraRuning = false;
+            mAvMediaRecorder.avMediaRecorderStopVideoAndAudio();
             mAvMediaRecorder = null;
         }
         VideoGather.getInstance().doStopCamera();
@@ -475,16 +474,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.start_muxer:
-                //   startRecord();
-                Log.d(TAG, "record clicked");
-                if (!RecordRuning) {
-                    StartRecord();
-                    Log.d(TAG, "start record ");
+                Log.d(TAG, "start camera button clicked");
+                if (!cameraRuning) {
+                    startCamera();
+                    Log.d(TAG, "start camera ");
                 } else {
-                    StopRecord();
-                    Log.d(TAG,"stop record ");
+                    stopCamera();
+                    Log.d(TAG, "stop camera ");
                 }
-                btnStart.setText(RecordRuning ? "停止" : "开始");
+                btnStart.setText(cameraRuning ? "停止" : "开始");
                 break;
             default:
                 break;

@@ -599,16 +599,23 @@ public class MediaStorageManager {
     }
 
     private List<File> getAndSortFiles (String path){
-        File[] allFiles = new File(path).listFiles();
-        List<File> files = new LinkedList<>();
-        Collections.addAll(files, allFiles);
+        List<File> files = null;
+        if (null != path) {
+            File file = new File(path);
+            if (null != file) {
+                File[] allFiles = file.listFiles();
+                files = new LinkedList<>();
+                Collections.addAll(files, allFiles);
 
-        Collections.sort(files, new Comparator<File>() {
-            @Override
-            public int compare(File o1, File o2) {
-                return o1.getName().compareToIgnoreCase(o2.getName());
+                Collections.sort(files, new Comparator<File>() {
+                    @Override
+                    public int compare(File o1, File o2) {
+                        return o1.getName().compareToIgnoreCase(o2.getName());
+                    }
+                });
+                return files;
             }
-        });
+        }
         return files;
     }
 
@@ -833,7 +840,7 @@ public class MediaStorageManager {
         Cursor cursor = mDb.rawQuery("select * from " + DataBaseHelper.History.TABLE
                 + " ORDER BY " + DataBaseHelper.History.START_LONG + " ASC", null);
 
-        if (cursor != null) {
+        if (cursor != null && cursor.getCount() > 0) {
             int longStartIndex = cursor.getColumnIndex(DataBaseHelper.History.START_LONG);
             int longEndIndex = cursor.getColumnIndex(DataBaseHelper.History.END_LONG);
             int stringStartIndex = cursor.getColumnIndex(DataBaseHelper.History.START_STRING);

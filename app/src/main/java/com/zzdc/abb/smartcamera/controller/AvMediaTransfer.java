@@ -80,15 +80,15 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         contrastManager = ContrastManager.getInstance();
         contrastManager.onContrasManager(new OnContrastListener() {
             @Override
-            public void onContrastRectList(List<Rect> rectList) {
+            public void onContrastRectList(List<Rect> rects) {
                 LogTool.d(TAG,"Attention please! there are alert faces!");
-                mRects = new byte[48];
-                int rectNum = rectList.size();
+                mRects = new byte[96];
+                int rectNum = rects.size();
                 for (int i =0; i<rectNum;i++){
-                    if (i>2) {
+                    if (i>5) {
                         break;
                     }
-                    Rect rect = rectList.get(i);
+                    Rect rect = rects.get(i);
                     System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
                     System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
                     System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
