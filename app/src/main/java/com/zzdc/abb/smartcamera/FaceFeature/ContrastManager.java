@@ -2,6 +2,7 @@ package com.zzdc.abb.smartcamera.FaceFeature;
 
 import android.graphics.Rect;
 import android.util.Log;
+
 import com.arcsoft.facedetection.AFD_FSDKEngine;
 import com.arcsoft.facedetection.AFD_FSDKError;
 import com.arcsoft.facedetection.AFD_FSDKFace;
@@ -14,13 +15,14 @@ import com.arcsoft.facetracking.AFT_FSDKError;
 import com.arcsoft.facetracking.AFT_FSDKFace;
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
-public class ContrastManager implements VideoGather.VideoRawDataListener{
+public class ContrastManager implements VideoGather.VideoRawDataListener {
 
     private static final String TAG = ContrastManager.class.getSimpleName() + "qxj";
 
@@ -61,26 +63,6 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
     public void onContrasManager(OnContrastListener onContrastListener) {
         this.onContrastListener = onContrastListener;
     }
-//    private Thread contrastThread = new Thread("Thread-contrastThread"){
-//        @Override
-//        public void run() {
-//            super.run();
-//            Log.d(TAG, "start contrastThread data");
-//            while (isContrast) {
-//                byte[] videoData = null;
-//                try {
-//                    videoData = videoDatas.take();
-//                    Log.d(TAG, "data contrasting ");
-//                    if (videoData != null) {
-//                        startContrastFeature(videoData, width, height);//设别
-//                    }
-//
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//        }
-//    };
 
     /**
      * 初始化人脸识别引擎 和 人脸比对引擎
@@ -244,10 +226,8 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
 
     @Override
     public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
-//        videoDatas.offer(buf.getData());
-        if (isContrast) {
-            startContrastFeature(buf.getData(), width, height);//设别
-        }
+
+        startContrastFeature(buf.getData(), width, height);//设别
     }
 
     /**
@@ -324,6 +304,9 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
      * @param ori  人脸角度
      */
     private void contrastFaceFeature(byte[] face, Rect rect, int ori, int width, int height) {
+        if (!isContrast) {
+            return;
+        }
         AFR_FSDKError error_FR;
 
         AFR_FSDKFace fsdkFace = new AFR_FSDKFace();
@@ -371,7 +354,6 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
 
         }
     }
-
 
 
     /**
