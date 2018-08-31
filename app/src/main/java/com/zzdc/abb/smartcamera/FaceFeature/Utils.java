@@ -1,29 +1,18 @@
 package com.zzdc.abb.smartcamera.FaceFeature;
 
-import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.ImageFormat;
 import android.graphics.Matrix;
-import android.graphics.Rect;
-import android.graphics.YuvImage;
 import android.media.ExifInterface;
 import android.util.Log;
 
 import com.guo.android_extend.image.ImageConverter;
 import com.zzdc.abb.smartcamera.TutkBussiness.SDCardBussiness;
-import com.zzdc.abb.smartcamera.common.ApplicationSetting;
 import com.zzdc.abb.smartcamera.controller.MediaStorageManager;
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 public class Utils {
@@ -58,7 +47,7 @@ public class Utils {
 
     public static void startToCreatePicture(String imagePath) {
         LogTool.d(TAG, "qxj--------Create Picture, this name : " + imagePath);
-        PictureProduceManager produceManager = PictureProduceManager.getInstance();
+        PictureProductManager produceManager = PictureProductManager.getInstance();
         produceManager.startCreatePicture(imagePath, true);
         VideoGather.getInstance().registerVideoRawDataListener(produceManager);
     }

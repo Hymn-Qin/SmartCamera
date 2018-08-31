@@ -5,57 +5,60 @@ import android.graphics.Rect;
 import android.graphics.YuvImage;
 
 import com.zzdc.abb.smartcamera.controller.VideoGather;
+import com.zzdc.abb.smartcamera.util.LogTool;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.nio.ByteBuffer;
 
 public class PictureProductManager implements VideoGather.VideoRawDataListener {
 
-
-    private String filePath = null;
-
+    private static final String TAG = PictureProductManager.class.getSimpleName();
+    private String type;
+    private String fileName;
+    private long loopTime = 30 * 60 * 1000;
     private boolean isCreate = false;
+    private static class PictureProduceManagerHolder {
+        private static final PictureProductManager INSTANCE = new PictureProductManager();
+    }
+    public static final PictureProductManager getInstance() {
+        return PictureProduceManagerHolder.INSTANCE;
+    }
+
 
     private PictureProductManager() {
 
     }
 
-    private static class PictureProductManagerHolder {
-        private static final PictureProductManager INSTANCE = new PictureProductManager();
-    }
-
-    public static final PictureProductManager getInstance() {
-        return PictureProductManagerHolder.INSTANCE;
-    }
-
-    public void startCreatePicture(String filePath, boolean isCreate) {
-        this.filePath = filePath;
+    public void startCreatePicture(String picturePath, boolean isCreate) {
+        this.fileName = picturePath;
         this.isCreate = isCreate;
     }
 
     @Override
     public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
+
         byte[] data = buf.getData();
+
         if (isCreate) {
             isCreate = false;
-            createImage(filePath, data, 1920, 1080);
+            LogTool.d(TAG, "qxj-------- Creating Picture");
+            createImage(fileName, data, 1920, 1080);
         }
 
     }
-
-    private void createImage(String imagePath, byte[] imageData, int width, int height) {
+    private void createImage(String imagePath, byte[] data, int width, int height) {
         try {
-            if (imagePath == null) return;
             File file = new File(imagePath);
             FileOutputStream outputStream = new FileOutputStream(file);
 
-            YuvImage image = new YuvImage(imageData, ImageFormat.NV21, width, height, null);
+            YuvImage image = new YuvImage(data, ImageFormat.NV21, width, height, null);
             image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 70, outputStream);
+            LogTool.d(TAG, "qxj--------over Create Picture, this name : " + imagePath);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
 
     }
+
 }

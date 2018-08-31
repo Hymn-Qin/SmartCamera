@@ -33,7 +33,7 @@ import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
-import com.zzdc.abb.smartcamera.FaceFeature.PictureProduceManager;
+import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
@@ -150,12 +150,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     }
                 } else if (type.equals("Contrast")) {
                     if (message.equals("true")) {
-                        if (!mAplicationSetting.getSystemMonitorOKSetting()) {
+                        if (!mAplicationSetting.getSystemContrastSetting()) {
                             mAplicationSetting.setSystemContrastSetting(true);
                             startContrast();
                         }
                     } else if (message.equals("false")) {
-                        if (mAplicationSetting.getSystemMonitorOKSetting()) {
+                        if (mAplicationSetting.getSystemContrastSetting()) {
                             mAplicationSetting.setSystemContrastSetting(false);
                             stopContrast();
                         }
@@ -231,7 +231,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         mAplicationSetting = ApplicationSetting.getInstance();
         mAplicationSetting.SetContext(this);
-        mIsEnableMonitor = mAplicationSetting.getSystemMonitorOKSetting();
         MotorCmd.DEVICE_POSE = mAplicationSetting.getDevicePose();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -426,7 +425,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             scheduler.shutdown();
             scheduler = null;
         }
-        VideoGather.getInstance().registerVideoRawDataListener(PictureProduceManager.getInstance());
+        VideoGather.getInstance().registerVideoRawDataListener(PictureProductManager.getInstance());
     }
 
     private Semaphore semaphore = new Semaphore(1);
