@@ -79,7 +79,7 @@ public class Utils {
         return getSDPath(facePath);
     }
 
-    public static String getSDPath(String path) {
+    private static String getSDPath(String path) {
         String tmpPath = null;
         SDCardBussiness tmpBussiness = SDCardBussiness.getInstance();
         if (tmpBussiness.isSDCardAvailable()) {

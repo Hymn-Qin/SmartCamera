@@ -39,7 +39,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
     private String faceFR_KEY;
     private String faceFT_KEY;
 
-    public static boolean isContrast = false;
+    private static boolean isContrast = false;
     private int scaleFD;
     private int scaleFT;
     private int MAXFD;
@@ -235,7 +235,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
      *
      * @param data 每一帧的数据  格式 NV21  1920  1080
      */
-    public void startContrastFeature(byte[] data, int width, int height) {
+    private void startContrastFeature(byte[] data, int width, int height) {
         if (!isContrast) {
             return;
         }

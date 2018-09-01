@@ -76,7 +76,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private static final String ACTION_STOP_CAMERA = "com.foxconn.zzdc.broadcast.STOP_CAMERA";
     private static final String ACTION_CAMERA_STATUS = "com.foxconn.zzdc.broadcast.camera";
     private static final String ACTION_CAMERA_ALERT = "com.foxconn.alert.camera.play";
-    private boolean mIsEnableMonitor;
     private static Context mContext;
 
     public static final int CallStateOff = 0;
