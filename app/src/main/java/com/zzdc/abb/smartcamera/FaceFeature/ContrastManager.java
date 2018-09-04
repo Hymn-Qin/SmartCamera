@@ -262,9 +262,9 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
             }
             return;
         }
-        if (result_FT.size() <= 0) {
-            return;
-        }
+//        if (result_FT.size() <= 0) {
+//            return;
+//        }
         Log.d(TAG, "AFT get face num >> " + result_FT.size());
         List<Rect> rectList = new ArrayList<>();
         for (AFT_FSDKFace faceFT : result_FT) {
