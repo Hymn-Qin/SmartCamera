@@ -218,16 +218,33 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
         return ContrastManager.getInstance();
     }
 
+    private Thread contrastThread = new Thread(){
+        @Override
+        public void run() {
+            super.run();
+            byte[] data = null;
+            while (isContrast) {
+                try {
+                    data = videoDatas.take();
+                    if (data != null) {
+                        startContrastFeature(data, width, height);//设别
+
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    };
     public void startContrast() {
         if (isContrast) {
-//            contrastThread.start();
+            contrastThread.start();
         }
     }
 
     @Override
     public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
-
-        startContrastFeature(buf.getData(), width, height);//设别
+        videoDatas.offer(buf.getData());
     }
 
     /**
