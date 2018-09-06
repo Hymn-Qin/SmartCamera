@@ -137,8 +137,44 @@ public class AudioGather {
         workThread = new Thread() {
             @Override
             public void run() {
-                if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
-                    audioRecord.startRecording();
+                boolean isStartRecordSuccess = false;
+                try {
+                    isStartRecordSuccess = true;
+                    if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
+                        audioRecord.startRecording();
+                    }
+                } catch (Exception e) {
+                    isStartRecordSuccess = false;
+                    LogTool.d(TAG,"Start record failed!!!,restart it! : ",e);
+                } finally {
+                    if (!isStartRecordSuccess) {
+                        try {
+                            isStartRecordSuccess = true;
+                            if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
+                                audioRecord.startRecording();
+                            }
+                        } catch (Exception e) {
+                            isStartRecordSuccess = false;
+                            LogTool.d(TAG,"Restart audio record failed!!! : ",e);
+                        } finally {
+                            if (!isStartRecordSuccess) {
+                                try {
+                                    isStartRecordSuccess = true;
+                                    if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
+                                        audioRecord.startRecording();
+                                    }
+                                } catch (Exception e) {
+                                    isStartRecordSuccess = false;
+                                    LogTool.d(TAG,"Third time start record failed!!! : ",e);
+                                } finally {
+                                    if (!isStartRecordSuccess) {
+                                        LogTool.d(TAG,"Finally,start audio record failed,so break thread.");
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 while (loop) {
                     try {

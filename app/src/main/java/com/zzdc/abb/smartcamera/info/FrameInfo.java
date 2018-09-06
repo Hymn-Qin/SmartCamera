@@ -15,7 +15,7 @@ import java.util.List;
  *
  * */
 public class FrameInfo implements Serializable{
-    public final int dataLength = 112;
+    public static final int dataLength = 112;
     public short codec_id;  //2byte
     public byte flags;  //1byte
     public byte cam_index;  //1byte

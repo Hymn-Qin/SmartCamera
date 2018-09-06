@@ -2,7 +2,6 @@ package com.zzdc.abb.smartcamera.FaceFeature;
 
 import android.graphics.Rect;
 import android.util.Log;
-
 import com.arcsoft.facedetection.AFD_FSDKEngine;
 import com.arcsoft.facedetection.AFD_FSDKError;
 import com.arcsoft.facedetection.AFD_FSDKFace;
@@ -15,14 +14,13 @@ import com.arcsoft.facetracking.AFT_FSDKError;
 import com.arcsoft.facetracking.AFT_FSDKFace;
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
-public class ContrastManager implements VideoGather.VideoRawDataListener {
+public class ContrastManager implements VideoGather.VideoRawDataListener{
 
     private static final String TAG = ContrastManager.class.getSimpleName() + "qxj";
 
@@ -63,6 +61,26 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
     public void onContrasManager(OnContrastListener onContrastListener) {
         this.onContrastListener = onContrastListener;
     }
+
+
+    private Thread contrastThread = new Thread(){
+        @Override
+        public void run() {
+            super.run();
+
+            byte[] data = null;
+            while (isContrast) {
+                try {
+                    data = videoDatas.take();
+                    if (data != null) {
+                        startContrastFeature(data, width, height);//设别
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    };
 
     /**
      * 初始化人脸识别引擎 和 人脸比对引擎
@@ -218,32 +236,19 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
         return ContrastManager.getInstance();
     }
 
-    private Thread contrastThread = new Thread(){
-        @Override
-        public void run() {
-            super.run();
-            byte[] data = null;
-            while (isContrast) {
-                try {
-                    data = videoDatas.take();
-                    if (data != null) {
-                        startContrastFeature(data, width, height);//设别
-
-                    }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    };
     public void startContrast() {
         if (isContrast) {
             contrastThread.start();
         }
     }
 
+    public void stopContrast() {
+        contrastThread = null;
+    }
+
     @Override
-    public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
+    public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {   
+
         videoDatas.offer(buf.getData());
     }
 
@@ -282,28 +287,32 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
 //        if (result_FT.size() <= 0) {
 //            return;
 //        }
-        Log.d(TAG, "AFT get face num >> " + result_FT.size());
+        int faceNum = result_FT.size();
+        Log.d(TAG, "AFT get face num >> " + faceNum);
         List<Rect> rectList = new ArrayList<>();
-        for (AFT_FSDKFace faceFT : result_FT) {
-            AFR_FSDKFace face = new AFR_FSDKFace(); // 用来存放提取到的人脸信息
+        for (int i = 0; i < FaceConfig.maxContrastFacesNUM; i++) {
+            Rect itemRect = new Rect();
+            if (i < faceNum) {
+                AFT_FSDKFace faceFT = result_FT.get(i);
+                AFR_FSDKFace face = new AFR_FSDKFace(); // 用来存放提取到的人脸信息
+                itemRect = faceFT.getRect(); // 人脸在图片中的位置
+                int degree = faceFT.getDegree(); // 人脸方向
+                error_FR = AFR.AFR_FSDK_ExtractFRFeature(data, width, height, AFR_FSDKEngine.CP_PAF_NV21, itemRect, degree, face); // 提取人脸信息
+                if (error_FR.getCode() != 0) {
+                    Log.d(TAG, "error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
+                    if (onContrastListener != null) {
+                        onContrastListener.onContrastError("error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
 
-            Rect itemRect = faceFT.getRect(); // 人脸在图片中的位置
-            int degree = faceFT.getDegree(); // 人脸方向
-            error_FR = AFR.AFR_FSDK_ExtractFRFeature(data, width, height, AFR_FSDKEngine.CP_PAF_NV21, itemRect, degree, face); // 提取人脸信息
-            if (error_FR.getCode() != 0) {
-                Log.d(TAG, "error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
-                if (onContrastListener != null) {
-                    onContrastListener.onContrastError("error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
-
+                    }
+                    continue;
                 }
-                continue;
+
+                byte[] faceData = face.getFeatureData();//人脸数据
+
+                //faceData 这张人脸的坐标 itemRect
+                contrastFaceFeature(faceData, itemRect, degree, width, height);
             }
-
-            byte[] faceData = face.getFeatureData();//人脸数据
-
             rectList.add(itemRect);
-            //faceData 这张人脸的坐标 itemRect
-            contrastFaceFeature(faceData, itemRect, degree, width, height);
         }
         if (onContrastListener != null) {
             onContrastListener.onContrastRectList(rectList);
@@ -371,6 +380,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
 
         }
     }
+
 
 
     /**

@@ -304,6 +304,8 @@ public class VideoGather {
                 camera.addCallbackBuffer(mVideoRawBuf.getData());
             }
         }
+
+
     }
 
     class NightModeThread extends Thread {

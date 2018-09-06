@@ -33,7 +33,7 @@ import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
-import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
+import com.zzdc.abb.smartcamera.FaceFeature.PictureProduceManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
@@ -118,16 +118,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             Log.e(TAG, "MainActivity onReceive " + intent.getAction());
             if (intent.getAction().equalsIgnoreCase("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED")) {
                 int mode = mAudioManager.getMode();
-                Log.d(TAG, "mode=" + mode + ",CallState=" + CallState);
+                Log.d(TAG,"mode="+mode + ",CallState="+CallState);
 
-                if (CallState == CallStateOff) {
+                if(CallState == CallStateOff) {
                     CallState = CallStateOn;
-                    if (mTutk != null) {
+                    if(mTutk != null) {
                         mTutk.StartCall();
                         //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
                         Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
                     }
-                } else if (CallState == CallStateOn) {
+                }else if(CallState == CallStateOn) {
                     CallState = CallStateOff;
                     if (mTutk != null) {
                         mTutk.StopCall();
@@ -153,14 +153,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             mAplicationSetting.setSystemContrastSetting(true);
                             startContrast();
                         }
-                    } else if (message.equals("false")) {
+                    }else if (message.equals("false")) {
                         if (mAplicationSetting.getSystemContrastSetting()) {
                             mAplicationSetting.setSystemContrastSetting(false);
                             stopContrast();
                         }
                     }
 
-                } else if (type.equals("Camera")) {
+                }else if (type.equals("Camera")) {
                     if (mAvMediaRecorder == null) {
                         mAvMediaRecorder = new AvMediaRecorder();
                     }
@@ -291,33 +291,28 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void startMonitorIfNeeded() {
         mControllerHandler.sendEmptyMessageDelayed(Constant.INIT_TUTK_UID, 3000);
-        //根据SharedPreferences中是否启动监控打开监控
-        if (mAplicationSetting.getSystemMonitorOKSetting()) {
-            Log.d(TAG, "from SharedPreferences start monitor");
-            mControllerHandler.sendEmptyMessageDelayed(Constant.START_RECORD, 6000);
-        } else {
-            Log.d(TAG, "from SharedPreferences do not start monitor");
-        }
+        Log.d(TAG, "from SharedPreferences start monitor");
+        mControllerHandler.sendEmptyMessageDelayed(Constant.START_RECORD, 6000);
     }
 
     private void setCameraStatusToServer(boolean value) {
         Intent intent = new Intent();
         intent.setAction(ACTION_CAMERA_STATUS);
-        intent.putExtra("type", "Camera");
-        if (value) {
+        intent.putExtra("type","Camera");
+        if(value) {
             intent.putExtra("result", "true");
         } else {
             intent.putExtra("result", "false");
         }
         sendBroadcast(intent);
-        LogTool.d(TAG, "(setCameraStatusToServer)Set camera status to : " + value);
+        LogTool.d(TAG,"(setCameraStatusToServer)Set camera status to : "+value);
     }
 
-    private void startRecordFirstTime() {
+    private  void startRecordFirstTime() {
         boolean cameraStatusInServer = mAplicationSetting.getSystemMonitorOKSetting();
         mAvMediaRecorder.initAudio();
         mAvMediaRecorder.avMediaRecorderStartAudio();
-        Log.d(TAG, "Start record when MainActivity start,and camera status in server = " + cameraStatusInServer);
+        Log.d(TAG,"Start record when MainActivity start,and camera status in server = "+cameraStatusInServer);
         if (cameraStatusInServer) {
             mAvMediaRecorder.initVideo();
             mAvMediaRecorder.avMediaRecorderStartVideo();
@@ -334,18 +329,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             mAplicationSetting.setSystemMonitorOKSetting(true);
             setCameraStatusToServer(true);
         }
+
+        startContrast();
+
     }
 
     public void stopCamera() {
+
         stopContrast();
+
         boolean cameraStatusInServer = mAplicationSetting.getSystemMonitorOKSetting();
-        Log.d(TAG, "Camera status in server = " + cameraStatusInServer);
+        Log.d(TAG,"Camera status in server = "+cameraStatusInServer);
         if (cameraStatusInServer) {
             mAvMediaRecorder.avMediaRecorderStopVideo();
             cameraRuning = false;
             mAplicationSetting.setSystemMonitorOKSetting(false);
             setCameraStatusToServer(false);
         }
+
     }
 
     public void startContrast() {
@@ -353,7 +354,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return;
         }
         if (mAplicationSetting.getSystemContrastSetting()) {
-            LogTool.d(TAG, "startContrast()" + mAplicationSetting.getSystemContrastSetting());
+            LogTool.d(TAG,"startContrast()" + mAplicationSetting.getSystemContrastSetting());
             ContrastManager contrastManager = ContrastManager.getInstance();
             contrastManager.setContrastKey(FaceConfig.faceAPP_Id, FaceConfig.faceFD_Key, FaceConfig.faceFR_KEY, FaceConfig.faceFT_KEY)
                     .setContrastConfig(1920, 1080, FaceConfig.scale, FaceConfig.scaleFT, FaceConfig.maxFacesNUM, FaceConfig.maxContrastFacesNUM)
@@ -365,7 +366,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             contrastManager.onContrasManager(new OnContrastListener() {
                 @Override
                 public void onContrastRectList(List<Rect> rectLists) {
-                    Log.d(TAG, "qxj--------get face rectList, the size : " + rectLists.size());
+                    Log.d(TAG, "qxj--------get face rectList");
                 }
 
                 @Override
@@ -394,9 +395,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     public void stopContrast() {
+
         ContrastManager contrastManager = ContrastManager.getInstance();
+        VideoGather.getInstance().unregisterVideoRawDataListener(contrastManager);
         contrastManager.setSwitchContrast(false);
-        VideoGather.getInstance().registerVideoRawDataListener(contrastManager);
+
         stopCreatePicture();
 
     }
@@ -423,8 +426,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (scheduler != null) {
             scheduler.shutdown();
             scheduler = null;
+            VideoGather.getInstance().unregisterVideoRawDataListener(PictureProduceManager.getInstance());
         }
-        VideoGather.getInstance().registerVideoRawDataListener(PictureProductManager.getInstance());
     }
 
     private Semaphore semaphore = new Semaphore(1);
@@ -450,9 +453,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        stopContrast();
         WindowUtils.removeView(mSurfacePreview);
         mMotorManager.closeMotor();
-        if (mTutk != null) {
+        if(mTutk!=null){
             mTutk.unInit();
         }
         if (cameraRuning) {
@@ -506,7 +510,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d(TAG, "tmpUid == NULL, retry");
                 tmpUid = "02:00:00:00:00:00";
             }
-            Log.d(TAG, "TUTK UID = " + tmpUid);
+            Log.d(TAG,"TUTK UID = " + tmpUid);
             Device tmpDevie = new Device();
             tmpDevie.setUID(tmpUid);
             String tmpJson;
@@ -557,7 +561,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public static boolean MUXER_DEBUG = false;
     public static boolean TRANSFER_DEBUG = false;
     public static boolean BUFFER_POOL_DEBUG = false;
-
     private void initDebug() {
         CompoundButton.OnCheckedChangeListener switchListener = new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -588,14 +591,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }
         };
-        ((Switch) findViewById(R.id.audio_gather_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.audio_encode_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.video_gather_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.video_encode_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.muxer_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.transfer_debug)).setOnCheckedChangeListener(switchListener);
-        ((Switch) findViewById(R.id.buffer_pool_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.audio_gather_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.audio_encode_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.video_gather_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.video_encode_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.muxer_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.transfer_debug)).setOnCheckedChangeListener(switchListener);
+        ((Switch)findViewById(R.id.buffer_pool_debug)).setOnCheckedChangeListener(switchListener);
     }
+
 
 
 }

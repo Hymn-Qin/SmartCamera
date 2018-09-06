@@ -268,7 +268,6 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
 
     public class RemoteAudioReceiveThread extends Thread {
         private static final int AUDIO_BUF_SIZE = 1024;
-        private static final int FRAME_INFO_SIZE = 16;
 
         private RemoteAudioReceiveThread(String name) {
             super(name);
@@ -277,7 +276,7 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
         @Override
         public void run() {
             Log.d(TAG, getName() + " start");
-            byte[] frameInfo = new byte[FRAME_INFO_SIZE];
+            byte[] frameInfo = new byte[FrameInfo.dataLength];
             byte[] audioBuffer = new byte[AUDIO_BUF_SIZE];
             while (ReceiveAudioRuning) {
                 int tmpRet = AVAPIs.avCheckAudioBuf(mAudioRecChannelID);
@@ -295,7 +294,7 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
                 }
 
                 int[] frameNumber = new int[1];
-                int ret = AVAPIs.avRecvAudioData(mAudioRecChannelID, audioBuffer, AUDIO_BUF_SIZE, frameInfo, FRAME_INFO_SIZE, frameNumber);
+                int ret = AVAPIs.avRecvAudioData(mAudioRecChannelID, audioBuffer, AUDIO_BUF_SIZE, frameInfo, FrameInfo.dataLength, frameNumber);
                 if (ret > 0) {
                     debug("Receive remote voice, ret = " + ret + ", frameNumber = " + frameNumber[0]);
                     for (RemoteAudioDataMonitor aMonitor : mRemoteAudioDataMonitors) {

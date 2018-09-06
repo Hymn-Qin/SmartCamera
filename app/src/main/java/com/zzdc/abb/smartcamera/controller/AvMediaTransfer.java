@@ -30,8 +30,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
     private Thread mVideoDataSendThread;
     private Thread mAudioDataSendThread;
     private ContrastManager contrastManager;
-    private volatile boolean isGetFaceInfo = false;
-    byte[] mRects;
+    byte[] mRects = new byte[96];
 
 
     private CopyOnWriteArrayList<AvTransferLister> mAvTransferListers = new CopyOnWriteArrayList<>();
@@ -82,19 +81,18 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
             @Override
             public void onContrastRectList(List<Rect> rects) {
                 LogTool.d(TAG,"Attention please! there are alert faces!");
-                mRects = new byte[96];
                 int rectNum = rects.size();
                 for (int i =0; i<rectNum;i++){
                     if (i>5) {
                         break;
                     }
                     Rect rect = rects.get(i);
+                    Log.d(TAG,"Send from QXJ "+rect.left+","+rect.top+","+rect.right+","+rect.bottom);
                     System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
                     System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
                     System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
                     System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
                 }
-                isGetFaceInfo = true;
             }
 
             @Override
@@ -176,14 +174,6 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
 
         frame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
 
-        if (isGetFaceInfo) {
-            frame.getFrameInfo().mRects = mRects;
-            mRects = null;
-            isGetFaceInfo = false;
-        }
-//        frame.getFrameInfo().mType = "H264";
-//        frame.getFrameInfo().timestamp = "1970-01-01 08:00:00";
-
         try {
             mVideoQueue.put(frame);
         } catch (Exception e) {
@@ -205,6 +195,7 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
                 try {
                     tmpFrame = mVideoQueue.take();
                     if (tmpFrame != null) {
+                        tmpFrame.getFrameInfo().mRects = mRects;
                         synchronized (mAvTransferListers) {
                             for (AvTransferLister avTransferLister : mAvTransferListers) {
                                 avTransferLister.sendVideoTutkFrame(tmpFrame);
