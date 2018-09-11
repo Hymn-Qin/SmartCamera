@@ -22,8 +22,8 @@ public class MP4Extrator {
     private MediaExtractor mVideoExtractor;
     private MediaExtractor mAudioExtractor;
     private boolean mIsWorking = false;
-    private String mDestFilePath ;
-    private long mDestTime;
+    private String mWantedFilePath ;
+    private long mUserGivenTime;
     private long mVideoStartTime;        //视频文件时间
     private int mAudioTrackIndex = -1;
     private int mVideoTrackIndex = -1;
@@ -34,32 +34,32 @@ public class MP4Extrator {
     private CopyOnWriteArrayList<ExtratorDataListenner> mListenrs = new CopyOnWriteArrayList<>();
 
     private byte[] PPS = new byte[]{
-        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x67,
+                (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x67,
                 (byte)0x42, (byte)0x80, (byte)0x1E, (byte)0xDA, (byte)0x02,
                 (byte)0x80, (byte)0xF6, (byte)0x94, (byte)0x82, (byte)0x81,
                 (byte)0x01, (byte)0x03, (byte)0x68, (byte)0x50, (byte)0x9A,
                 (byte)0x80, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01,
                 (byte)0x68, (byte)0xCE, (byte)0x06, (byte)0xE2};
 
-    public MP4Extrator(String aFilePath, long aDestTime, long aVideoStartTime){
-        mDestFilePath = aFilePath;
-        mDestTime = aDestTime;
+    public MP4Extrator(String aFilePath, long aUserGivenTime, long aVideoStartTime){
+        mWantedFilePath = aFilePath;
+        mUserGivenTime = aUserGivenTime;
         mVideoStartTime = aVideoStartTime;
     }
 
     public boolean init(){
-        LogTool.d(TAG,"mDestFilePath = " + mDestFilePath);
-        File tmpFile = new File(mDestFilePath);
+        LogTool.d(TAG,"LEON-mWantedFilePath = " + mWantedFilePath);
+        File tmpFile = new File(mWantedFilePath);
         if (!tmpFile.exists() || tmpFile.length() == 0) {
-            LogTool.w(TAG,"File not exist");
+            LogTool.w(TAG,"LEON-File not exist");
             mIsWorking = false;
             return false;
         } else {
             mVideoExtractor = new MediaExtractor();
             mAudioExtractor = new MediaExtractor();
             try {
-                mAudioExtractor.setDataSource(mDestFilePath);
-                mVideoExtractor.setDataSource(mDestFilePath);
+                mAudioExtractor.setDataSource(mWantedFilePath);
+                mVideoExtractor.setDataSource(mWantedFilePath);
             } catch (IOException e) {
                 LogTool.w(TAG, "Set data source for extractor with exception", e);
                 return false;
@@ -68,7 +68,6 @@ public class MP4Extrator {
             for (int i = 0; i < trackCount; i++){
                 MediaFormat tmpFormat = mVideoExtractor.getTrackFormat(i);
                 String mineType = tmpFormat.getString(MediaFormat.KEY_MIME);
-                LogTool.d(TAG, "Find track: " + mineType);
                 if (mineType.startsWith("video/")) {
                     mVideoTrackIndex = i;
                 } else if (mineType.startsWith("audio/")) {
@@ -84,6 +83,7 @@ public class MP4Extrator {
             mVideoExtractor.selectTrack(mVideoTrackIndex);
             mAudioExtractor.selectTrack(mAudioTrackIndex);
 
+            LogTool.d(TAG,"LEON-MP4Extrator init success!!!");
             return true;
         }
     }
@@ -94,11 +94,11 @@ public class MP4Extrator {
             public void run() {
                 super.run();
 
-                LogTool.d(TAG, "File time = " + mVideoStartTime + ", dest time = " + mDestTime);
+                LogTool.d(TAG, "LEON-File start time = " + mVideoStartTime + ", user given time = " + mUserGivenTime);
                 long firstSampleTime = mVideoExtractor.getSampleTime();
-                long offset = Math.max(0, mDestTime - mVideoStartTime);
-                long seekTime = firstSampleTime + offset * 1000;
-                LogTool.d(TAG,"First sample time = " + firstSampleTime + ", offset = " + offset + ", seek time  = " + seekTime);
+                long offset = Math.max(0, mUserGivenTime - mVideoStartTime);
+                long seekTime = firstSampleTime + offset;
+                LogTool.d(TAG,"LEON-First sample time = " + firstSampleTime + ", offset = " + offset + ", seek time  = " + seekTime);
                 mVideoExtractor.seekTo(seekTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
                 mAudioExtractor.seekTo(seekTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
 
@@ -107,82 +107,92 @@ public class MP4Extrator {
                 ByteBuffer audioByteBuffer = ByteBuffer.allocate(500 * 1024);
                 ByteBuffer videoByteBuffer = ByteBuffer.allocate(500 * 1024);
                 while(mIsWorking && !interrupted()) {
-                    long sampleTime = mVideoExtractor.getSampleTime();
+                    try {
+                        long sampleTime = mVideoExtractor.getSampleTime();
+                        long time = System.currentTimeMillis();
+                        long extractDuration = time - beginExtractTime;
+                        long sampleDuration = (sampleTime - seekTime)/1000;
+//                        LogTool.d(TAG,"LEON1-sampleDuration = "+sampleDuration+"; extractDuration = "+extractDuration);
+                        if (sampleDuration > extractDuration) {
+                            try {
+                                sleep(sampleDuration - extractDuration);
+                            } catch (InterruptedException e) {
+                                LogTool.w(TAG, "Interrupted, ", e);
+                                break;
+                            }
+                        }
 
-                    long time = System.currentTimeMillis();
-                    long extractDuration = time - beginExtractTime;
-                    long sampleDuration = (sampleTime - seekTime)/1000;
-                    if (sampleDuration > extractDuration) {
-                        try {
-                            sleep(sampleDuration - extractDuration);
-                        } catch (InterruptedException e) {
-                            LogTool.w(TAG, "Interrupted, ", e);
+                        int videoSampleSize = mVideoExtractor.readSampleData(videoByteBuffer, 0);
+//                        debug("LEON1-Extract video SampleCount = " + videoSampleSize);
+                        if (videoSampleSize < 0) {
+                            LogTool.d(TAG,"Leon-11111111111111111111111111111111111111111111 break");
+                            mIsWorking = false;
                             break;
                         }
-                    }
+                        long tmpRecodingTime = mVideoStartTime + (sampleTime - firstSampleTime);
 
-                    int videoSampleSize = mVideoExtractor.readSampleData(videoByteBuffer, 0);
-                    debug("Extract video SampleCount = " + videoSampleSize);
-                    if (videoSampleSize < 0) {
-                        mIsWorking = false;
-                        break;
-                    }
-                    long tmpRecodingTime = mVideoStartTime + ((sampleTime - firstSampleTime)/1000);
+                        TutkFrame videoFrame = null;
+//                    int type = videoByteBuffer.get(4)& 0x1F;
+//                    if (type == 7 || type == 8) {
+//                        byte[] tmpPPS = new byte[videoSampleSize];
+//                        videoByteBuffer.get(tmpPPS, 0, videoSampleSize);
+//                        PPS = tmpPPS;
+//                        debug("PPS frame, PPS: " + ByteToHexTool.bytesToHex(tmpPPS));
+//                    } else if (type == 5) {
+//                        if (PPS != null && PPS.length > 0) {
+//                            debug("LEON1-Key frame, PPS length = " + PPS.length);
+//                            videoFrame = mVideoBufPool.getBuf(PPS.length + videoSampleSize);
+//                            videoFrame.setDataLen(PPS.length + videoSampleSize);
+//                            System.arraycopy(PPS, 0, videoFrame.getData(), 0, PPS.length);
+//                            videoByteBuffer.get(videoFrame.getData(), PPS.length, videoSampleSize);
+//                        } else {
+//                            debug("LEON1-Key frame, PPS is empty");
+//                            videoFrame = mVideoBufPool.getBuf(videoSampleSize);
+//                            videoFrame.setDataLen(videoSampleSize);
+//                            videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
+//                        }
+//                    } else {
+//                        debug("LEON1-Normal frame");
+//                        videoFrame = mVideoBufPool.getBuf(videoSampleSize);
+//                        videoFrame.setDataLen(videoSampleSize);
+//                        videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
+//                    }
 
-                    TutkFrame videoFrame = null;
-                    int type = videoByteBuffer.get(4)& 0x1F;
-                    if (type == 7 || type == 8) {
-                        byte[] tmpPPS = new byte[videoSampleSize];
-                        videoByteBuffer.get(tmpPPS, 0, videoSampleSize);
-                        PPS = tmpPPS;
-                        debug("PPS frame, PPS: " + ByteToHexTool.bytesToHex(tmpPPS));
-                    } else if (type == 5) {
-                        if (PPS != null && PPS.length > 0) {
-                            debug("Key frame, PPS length = " + PPS.length);
-                            videoFrame = mVideoBufPool.getBuf(PPS.length + videoSampleSize);
-                            videoFrame.setDataLen(PPS.length + videoSampleSize);
-                            System.arraycopy(PPS, 0, videoFrame.getData(), 0, PPS.length);
-                            videoByteBuffer.get(videoFrame.getData(), PPS.length, videoSampleSize);
-                        } else {
-                            debug("Key frame, PPS is empty");
-                            videoFrame = mVideoBufPool.getBuf(videoSampleSize);
-                            videoFrame.setDataLen(videoSampleSize);
-                            videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
-                        }
-                    } else {
-                        debug("Normal frame");
                         videoFrame = mVideoBufPool.getBuf(videoSampleSize);
                         videoFrame.setDataLen(videoSampleSize);
                         videoByteBuffer.get(videoFrame.getData(), 0, videoSampleSize);
-                    }
-                    videoFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
-                    videoFrame.getFrameInfo().timestamp = tmpRecodingTime;
-                    for (int j= 0;j< mListenrs.size();j++){
-                        mListenrs.get(j).onExtratorVideoDataReady(videoFrame);
-                    }
-                    videoFrame.decreaseRef();
-                    videoByteBuffer.clear();
 
-                    int audioSampleSize = mAudioExtractor.readSampleData(audioByteBuffer, 0);
-                    if(audioSampleSize > 0){
-                        int dataLen = audioSampleSize + ADT_SIZE;
-                        TutkFrame audioFrame = mAudioBufPool.getBuf(dataLen);
-                        audioFrame.setDataLen(dataLen);
-
-                        addADTStoPacket(audioFrame.getData(), dataLen);
-                        audioByteBuffer.get(audioFrame.getData(), ADT_SIZE, audioSampleSize);
-                        audioFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
-                        audioFrame.getFrameInfo().timestamp = tmpRecodingTime;
-
+                        videoFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_VIDEO_H264;
+                        videoFrame.getFrameInfo().timestamp = tmpRecodingTime;
                         for (int j= 0;j< mListenrs.size();j++){
-                            mListenrs.get(j).onExtratorAudioDataReady(audioFrame);
+                            mListenrs.get(j).onExtratorVideoDataReady(videoFrame);
                         }
-                        audioFrame.decreaseRef();
-                    }
-                    audioByteBuffer.clear();
+                        videoFrame.decreaseRef();
+                        videoByteBuffer.clear();
 
-                    mVideoExtractor.advance();
-                    mAudioExtractor.advance();
+                        int audioSampleSize = mAudioExtractor.readSampleData(audioByteBuffer, 0);
+                        if(audioSampleSize > 0){
+                            int dataLen = audioSampleSize + ADT_SIZE;
+                            TutkFrame audioFrame = mAudioBufPool.getBuf(dataLen);
+                            audioFrame.setDataLen(dataLen);
+
+                            addADTStoPacket(audioFrame.getData(), dataLen);
+                            audioByteBuffer.get(audioFrame.getData(), ADT_SIZE, audioSampleSize);
+                            audioFrame.getFrameInfo().codec_id = AVFrame.MEDIA_CODEC_AUDIO_MP3;
+                            audioFrame.getFrameInfo().timestamp = tmpRecodingTime;
+
+                            for (int j= 0;j< mListenrs.size();j++){
+                                mListenrs.get(j).onExtratorAudioDataReady(audioFrame);
+                            }
+                            audioFrame.decreaseRef();
+                        }
+                        audioByteBuffer.clear();
+
+                        mVideoExtractor.advance();
+                        mAudioExtractor.advance();
+                    } catch (Exception e) {
+                        LogTool.e(TAG,"Extractor history video with exception,please attention!!! ",e);
+                    }
                 }
                 //TODO Notify the extract stop reason.
             }

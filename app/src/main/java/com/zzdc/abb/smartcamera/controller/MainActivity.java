@@ -33,7 +33,7 @@ import com.ptz.motorControl.MotorManager;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
-import com.zzdc.abb.smartcamera.FaceFeature.PictureProduceManager;
+import com.zzdc.abb.smartcamera.FaceFeature.PictureProductManager;
 import com.zzdc.abb.smartcamera.FaceFeature.Utils;
 import com.zzdc.abb.smartcamera.R;
 import com.zzdc.abb.smartcamera.TutkBussiness.TutkManager;
@@ -179,7 +179,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             }
                         }
                     }
-                    setCameraStatusToServer(mAplicationSetting.getSystemMonitorOKSetting());
                 }
             }
         }
@@ -329,15 +328,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             mAplicationSetting.setSystemMonitorOKSetting(true);
             setCameraStatusToServer(true);
         }
-
         startContrast();
-
     }
 
     public void stopCamera() {
-
         stopContrast();
-
         boolean cameraStatusInServer = mAplicationSetting.getSystemMonitorOKSetting();
         Log.d(TAG,"Camera status in server = "+cameraStatusInServer);
         if (cameraStatusInServer) {
@@ -426,7 +421,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (scheduler != null) {
             scheduler.shutdown();
             scheduler = null;
-            VideoGather.getInstance().unregisterVideoRawDataListener(PictureProduceManager.getInstance());
+            VideoGather.getInstance().unregisterVideoRawDataListener(PictureProductManager.getInstance());
         }
     }
 
@@ -467,6 +462,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         VideoGather.getInstance().doStopCamera();
         unregisterReceiver(mOneKeyCallReciever);
 
+        ContrastManager.getInstance().stopContrast();
         if (mIsCmdComeFromOpenHotSpot) {
             Intent intend = new Intent();
             intend.setAction(ACTION_STOP_CAMERA);

@@ -2,6 +2,7 @@ package com.zzdc.abb.smartcamera.FaceFeature;
 
 import android.graphics.Rect;
 import android.util.Log;
+
 import com.arcsoft.facedetection.AFD_FSDKEngine;
 import com.arcsoft.facedetection.AFD_FSDKError;
 import com.arcsoft.facedetection.AFD_FSDKFace;
@@ -14,17 +15,18 @@ import com.arcsoft.facetracking.AFT_FSDKError;
 import com.arcsoft.facetracking.AFT_FSDKFace;
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
-public class ContrastManager implements VideoGather.VideoRawDataListener{
+public class ContrastManager implements VideoGather.VideoRawDataListener {
 
     private static final String TAG = ContrastManager.class.getSimpleName() + "qxj";
 
-    private LinkedBlockingQueue<byte[]> videoDatas = new LinkedBlockingQueue<>();
+    private LinkedBlockingQueue<byte[]> videoDatas = null;
     private CopyOnWriteArrayList<FaceFRBean> familyFaceFRBeans;//家庭成员人脸
     private CopyOnWriteArrayList<FaceFRBean> focusFaceFRBeans;//家庭重点关注成员人脸
 
@@ -56,31 +58,15 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         return ContrastManagerHolder.INSTANCE;
     }
 
-    private OnContrastListener onContrastListener = null;
+    private List<OnContrastListener> onContrastListeners = new ArrayList<>();
 
     public void onContrasManager(OnContrastListener onContrastListener) {
-        this.onContrastListener = onContrastListener;
+        if (!onContrastListeners.contains(onContrastListener)) {
+            onContrastListeners.add(onContrastListener);
+        }
     }
 
-
-    private Thread contrastThread = new Thread(){
-        @Override
-        public void run() {
-            super.run();
-
-            byte[] data = null;
-            while (isContrast) {
-                try {
-                    data = videoDatas.take();
-                    if (data != null) {
-                        startContrastFeature(data, width, height);//设别
-                    }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    };
+    private Thread contrastThread = null;
 
     /**
      * 初始化人脸识别引擎 和 人脸比对引擎
@@ -153,8 +139,11 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         if (err.getCode() == 0) {
             return FSDKEngine;
         } else {
-            if (onContrastListener != null) {
-                onContrastListener.onContrastError("getAFD_FSDKEngine >> AFD_FSDK_InitialFaceEngine = " + err.getCode());
+            for (OnContrastListener onContrastListener : onContrastListeners) {
+
+                    onContrastListener.onContrastError("getAFD_FSDKEngine >> AFD_FSDK_InitialFaceEngine = " + err.getCode());
+
+
             }
             return null;
         }
@@ -167,7 +156,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         if (error.getCode() == 0) {
             return AFREngine;
         } else {
-            if (onContrastListener != null) {
+            for (OnContrastListener onContrastListener : onContrastListeners) {
                 onContrastListener.onContrastError("getAFR_FSDKEngine >> AFR_FSDK_InitialEngine = " + error.getCode());
             }
             return null;
@@ -181,7 +170,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         if (err.getCode() == 0) {
             return FTDKEngine;
         } else {
-            if (onContrastListener != null) {
+            for (OnContrastListener onContrastListener : onContrastListeners) {
                 onContrastListener.onContrastError("getAFT_FSDKEngine >> AFT_FSDK_InitialFaceEngine = " + err.getCode());
             }
             return null;
@@ -211,10 +200,14 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
             isContrast = isOK;
             if (isContrast) {
                 InitFaceFeatureManager();
+                videoDatas = new LinkedBlockingQueue<>();
                 familyFaceFRBeans = new CopyOnWriteArrayList<>();
                 focusFaceFRBeans = new CopyOnWriteArrayList<>();
             } else {
-                UninitFaceFeatureManager();
+                if (contrastThread != null) {
+                    contrastThread = null;
+                }
+                videoDatas = null;
             }
         }
         return ContrastManager.getInstance();
@@ -238,18 +231,39 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
 
     public void startContrast() {
         if (isContrast) {
-            contrastThread.start();
+            if (contrastThread == null) {
+                contrastThread = new Thread() {
+                    @Override
+                    public void run() {
+                        super.run();
+                        byte[] data = null;
+                        try {
+                            while (isContrast) {
+                                data = videoDatas.take();
+                                if (data != null) {
+                                    startContrastFeature(data, width, height);//设别
+                                }
+                            }
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                };
+                contrastThread.start();
+            }
         }
     }
 
     public void stopContrast() {
-        contrastThread = null;
+        UninitFaceFeatureManager();
     }
 
     @Override
-    public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {   
+    public void onVideoRawDataReady(VideoGather.VideoRawBuf buf) {
 
-        videoDatas.offer(buf.getData());
+        if (isContrast) {
+            videoDatas.offer(buf.getData());
+        }
     }
 
     /**
@@ -279,7 +293,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         if (error_FT.getCode() != 0) {
             Log.d(TAG, "error_FT AFT_FSDK_FaceFeatureDetect >> " + error_FT.getCode());
 
-            if (onContrastListener != null) {
+            for (OnContrastListener onContrastListener : onContrastListeners) {
                 onContrastListener.onContrastError("error_FT >> " + error_FT.getCode());
             }
             return;
@@ -300,7 +314,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
                 error_FR = AFR.AFR_FSDK_ExtractFRFeature(data, width, height, AFR_FSDKEngine.CP_PAF_NV21, itemRect, degree, face); // 提取人脸信息
                 if (error_FR.getCode() != 0) {
                     Log.d(TAG, "error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
-                    if (onContrastListener != null) {
+                    for (OnContrastListener onContrastListener : onContrastListeners) {
                         onContrastListener.onContrastError("error_FR AFR_FSDK_ExtractFRFeature >> " + error_FR.getCode());
 
                     }
@@ -314,7 +328,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
             }
             rectList.add(itemRect);
         }
-        if (onContrastListener != null) {
+        for (OnContrastListener onContrastListener : onContrastListeners) {
             onContrastListener.onContrastRectList(rectList);
 
         }
@@ -346,7 +360,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
             error_FR = AFR.AFR_FSDK_FacePairMatching(fsdkFace, faceFRBean.getAFRFace(), score);
             if (error_FR.getCode() != 0) {
                 Log.d(TAG, "error_FR  AFR_FSDK_FacePairMatching>> " + error_FR.getCode());
-                if (onContrastListener != null) {
+                for (OnContrastListener onContrastListener : onContrastListeners) {
                     onContrastListener.onContrastError("error_FR AFR_FSDK_FacePairMatching >> " + error_FR.getCode());
                 }
                 continue;
@@ -358,12 +372,12 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
                 Log.d(TAG, "the face data from video is  ：" + faceFRBean.getmName());
                 if (familyFocusFeature(faceFRBean.getmName())) {
                     //是重点关注人员
-                    if (onContrastListener != null) {
+                    for (OnContrastListener onContrastListener : onContrastListeners) {
                         onContrastListener.onContrastSucceed(true, faceFRBean.getmName());
 
                     }
                 } else {
-                    if (onContrastListener != null) {
+                    for (OnContrastListener onContrastListener : onContrastListeners) {
                         onContrastListener.onContrastSucceed(false, faceFRBean.getmName());
 
                     }
@@ -375,12 +389,11 @@ public class ContrastManager implements VideoGather.VideoRawDataListener{
         //当前人脸是陌生人
         Log.d(TAG, "this is a stranger , rect >> " + rect.toString());
         Log.d(TAG, "start alert for face ");
-        if (onContrastListener != null) {
+        for (OnContrastListener onContrastListener : onContrastListeners) {
             onContrastListener.onContrastFailed("陌生人", face);
 
         }
     }
-
 
 
     /**

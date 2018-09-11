@@ -60,6 +60,7 @@ public class TutkCmdManager {
     private static final int STATUS_HISTORY_TRANSFER = 2;
     private static final int STATUS_WARNING_TRANSFER = 3;
     private int mTransmissionStatus = STATUS_IDEL;
+    private volatile boolean isStopFromHistoryOrAlert = false;
 
     private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = new ThreadLocal<SimpleDateFormat>() {
         @Override
@@ -192,6 +193,15 @@ public class TutkCmdManager {
 
     private void handleIpCameraStart() {
         LogTool.d(TAG, "IOTYPE_USER_IPCAM_START");
+        if (isStopFromHistoryOrAlert) {
+            try {
+                Thread.sleep(5000);
+            } catch (Exception e ) {
+                LogTool.e(TAG,"Sleep 5 second is interrupt : ",e);
+            }
+            LogTool.d(TAG, "Switch history video to live video.");
+            isStopFromHistoryOrAlert = false;
+        }
 
         if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
             if (mExtractor != null) {
@@ -201,6 +211,7 @@ public class TutkCmdManager {
             }
         }
         mTransmissionStatus = STATUS_RUNTIME_TRANSFER;
+        mMediaTransfer.setHistoryVideoPlayingStatus(false);
         AudioEncoder.getInstance().registerEncoderListener(mMediaTransfer);
         VideoEncoder.getInstance().registerEncoderListener(mMediaTransfer);
         mMediaTransfer.startAvMediaTransfer();
@@ -209,7 +220,7 @@ public class TutkCmdManager {
     }
 
     private void handleIpCameraStop() {
-        LogTool.d(TAG, " LEON-IOTYPE_USER_IPCAM_STOP");
+        LogTool.d(TAG, "IOTYPE_USER_IPCAM_STOP");
         mTutkSession.writeMessge("ok");
 
         if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
@@ -218,6 +229,7 @@ public class TutkCmdManager {
             mMediaTransfer.unRegisterAvTransferListener(mTutkSession);
             mMediaTransfer.stopAvMediaTransfer();
         } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
+            isStopFromHistoryOrAlert = true;
             if (mExtractor != null) {
                 mExtractor.stop();
                 mExtractor = null;
@@ -329,8 +341,8 @@ public class TutkCmdManager {
         try {
             String stringTime = jObj.getString("time");
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " time: " + stringTime);
-            long longTime = TIME_FORMAT.get().parse(stringTime).getTime();
-            String file = MediaStorageManager.getInstance().getHistoryFile(longTime);
+            long userGivenTime = TIME_FORMAT.get().parse(stringTime).getTime();
+            String file = MediaStorageManager.getInstance().getHistoryFile(userGivenTime);
             JSONObject j = new JSONObject();
             if ( file == null) {
                 j.put("type","setHistoryVideo");
@@ -343,21 +355,27 @@ public class TutkCmdManager {
                 j.put("desc", " ");
                 mTutkSession.writeMessge(j.toString());
 
+                LogTool.d(TAG,"LEON-We want history file name = "+file);
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
+                    LogTool.d(TAG,"LEON-Stop live video and start history video.");
                     AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                 } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER){
+                    LogTool.d(TAG,"LEON-Stop (history or alert) video and start (history or alert) video.");
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
+                        mExtractor = null;
                     }
                 }
+                mMediaTransfer.setHistoryVideoPlayingStatus(true);
                 long videoStartTime = MediaStorageManager.getHistoryMediaStartTime(file);
-                mExtractor = new MP4Extrator(file, longTime, videoStartTime);
+                mExtractor = new MP4Extrator(file, userGivenTime, videoStartTime);
                 mExtractor.registerExtratorListener(mMediaTransfer);
-                mExtractor.init();
-                mExtractor.start();
-                mTransmissionStatus = STATUS_HISTORY_TRANSFER;
+                if (mExtractor.init()) {
+                    mExtractor.start();
+                    mTransmissionStatus = STATUS_HISTORY_TRANSFER;
+                }
             }
         } catch (JSONException | ParseException e) {
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " with exception, ", e);
@@ -436,6 +454,7 @@ public class TutkCmdManager {
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
+                        mExtractor = null;
                     }
                 }
                 long videoStartTime = MediaStorageManager.getWarningMediaStartTime(file);

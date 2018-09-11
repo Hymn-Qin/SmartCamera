@@ -31,9 +31,14 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
     private Thread mAudioDataSendThread;
     private ContrastManager contrastManager;
     byte[] mRects = new byte[96];
+    private boolean isPlayingHistoryVideo = false;
 
 
     private CopyOnWriteArrayList<AvTransferLister> mAvTransferListers = new CopyOnWriteArrayList<>();
+
+    public void setHistoryVideoPlayingStatus(boolean status) {
+        isPlayingHistoryVideo = status;
+    }
 
     public void registerAvTransferListener(AvTransferLister listener) {
         LogTool.d(TAG,"transferlisterners count:"+mAvTransferListers.size());
@@ -81,17 +86,19 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
             @Override
             public void onContrastRectList(List<Rect> rects) {
                 LogTool.d(TAG,"Attention please! there are alert faces!");
-                int rectNum = rects.size();
-                for (int i =0; i<rectNum;i++){
-                    if (i>5) {
-                        break;
+                if (null != mRects) {
+                    int rectNum = rects.size();
+                    for (int i =0; i<rectNum;i++){
+                        if (i>5) {
+                            break;
+                        }
+                        Rect rect = rects.get(i);
+                        Log.d(TAG,"Send from QXJ "+rect.left+","+rect.top+","+rect.right+","+rect.bottom);
+                        System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
+                        System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
+                        System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
+                        System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
                     }
-                    Rect rect = rects.get(i);
-                    Log.d(TAG,"Send from QXJ "+rect.left+","+rect.top+","+rect.right+","+rect.bottom);
-                    System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
-                    System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
-                    System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
-                    System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
                 }
             }
 
@@ -195,7 +202,9 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
                 try {
                     tmpFrame = mVideoQueue.take();
                     if (tmpFrame != null) {
-                        tmpFrame.getFrameInfo().mRects = mRects;
+                        if (!isPlayingHistoryVideo) {
+                            tmpFrame.getFrameInfo().mRects = mRects;
+                        }
                         synchronized (mAvTransferListers) {
                             for (AvTransferLister avTransferLister : mAvTransferListers) {
                                 avTransferLister.sendVideoTutkFrame(tmpFrame);

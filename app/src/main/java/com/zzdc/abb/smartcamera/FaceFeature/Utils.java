@@ -58,7 +58,7 @@ public class Utils {
 
     public static void startToCreatePicture(String imagePath) {
         LogTool.d(TAG, "qxj--------Create Picture, this name : " + imagePath);
-        PictureProduceManager produceManager = PictureProduceManager.getInstance();
+        PictureProductManager produceManager = PictureProductManager.getInstance();
         produceManager.startCreatePicture(imagePath, true);
         VideoGather.getInstance().registerVideoRawDataListener(produceManager);
     }

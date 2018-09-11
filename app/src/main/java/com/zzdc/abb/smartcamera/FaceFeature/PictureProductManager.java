@@ -3,6 +3,7 @@ package com.zzdc.abb.smartcamera.FaceFeature;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
+import android.os.Handler;
 
 import com.zzdc.abb.smartcamera.controller.VideoGather;
 import com.zzdc.abb.smartcamera.util.LogTool;

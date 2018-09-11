@@ -251,7 +251,7 @@ public class MediaStorageManager {
                 null);
 
         if (cursor != null) {
-            if (cursor.moveToNext()) {
+            if (cursor.moveToFirst()) {
                 int indexName = cursor.getColumnIndex(DataBaseHelper.History.FILE_NAME);
                 file = cursor.getString(indexName);
             }
