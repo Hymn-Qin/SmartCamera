@@ -30,6 +30,7 @@ import android.widget.Toast;
 
 import com.ptz.motorControl.MotorCmd;
 import com.ptz.motorControl.MotorManager;
+import com.zzdc.abb.smartcamera.FaceFeature.AlertManagerService;
 import com.zzdc.abb.smartcamera.FaceFeature.ContrastManager;
 import com.zzdc.abb.smartcamera.FaceFeature.FaceConfig;
 import com.zzdc.abb.smartcamera.FaceFeature.OnContrastListener;
@@ -65,7 +66,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Button btnStart;
     private Button btnCall;
     private SurfacePreview mSurfacePreview;
-    private boolean cameraRuning = false;
+    public static boolean cameraRuning = false;
     private ApplicationSetting mAplicationSetting = null;
     private boolean mIsCmdComeFromOpenHotSpot = false;
     private TutkManager mTutk;
@@ -81,6 +82,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public static final int CallStateOff = 0;
     public static final int CallStateOn = 1;
     public static int CallState = CallStateOff;
+    private static final String ONE_KEY_CALL = "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED";
 
     private AudioManager mAudioManager;
 
@@ -114,40 +116,40 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            // TODO: This method is called when the BroadcastReceiver is receiving
-            Log.e(TAG, "MainActivity onReceive " + intent.getAction());
-            if (intent.getAction().equalsIgnoreCase("com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED")) {
+            String myAction = intent.getAction();
+            Log.e(TAG, "MainActivity OneKeyCallReciever onReceive : "+myAction);
+            if (myAction.equalsIgnoreCase(ONE_KEY_CALL) && mAplicationSetting.getSystemMonitorOKSetting()) {
                 int mode = mAudioManager.getMode();
-                Log.d(TAG,"mode="+mode + ",CallState="+CallState);
+                Log.d(TAG, "mode=" + mode + ",CallState=" + CallState);
 
-                if(CallState == CallStateOff) {
+                if (CallState == CallStateOff) {
                     CallState = CallStateOn;
-                    if(mTutk != null) {
+                    if (mTutk != null) {
                         mTutk.StartCall();
-                        //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
-                        Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
+                        Log.d(TAG, "Start one key call from device.");
                     }
-                }else if(CallState == CallStateOn) {
+                } else if (CallState == CallStateOn) {
                     CallState = CallStateOff;
                     if (mTutk != null) {
+                        mTutk.stopOneKeyCall();
                         mTutk.StopCall();
-                        //       Toast.makeText(MainActivity.this, "start Call", Toast.LENGTH_SHORT).show();
-                        Log.d(TAG, "com.foxconn.zzdc.broadcast.VOLUME_UP_PRESSED");
+                        Log.d(TAG, "Stop one key call from device.");
                     }
                 }
-            } else if (intent.getAction().equalsIgnoreCase(ACTION_OPEN_HOT_SPOT)) {
+            } else if (myAction.equalsIgnoreCase(ACTION_OPEN_HOT_SPOT)) {
                 Log.d(TAG, "Somebody wants to reset WIFI !!!");
                 finish();
                 mIsCmdComeFromOpenHotSpot = true;
-            } else if (intent.getAction().equalsIgnoreCase(ACTION_CAMERA_ALERT)) {
+            } else if (myAction.equalsIgnoreCase(ACTION_CAMERA_ALERT)) {
                 String type = intent.getStringExtra("type");
                 String message = intent.getStringExtra("message");
                 Log.d(TAG, "get receive -- type = " + type + " message = " + message);
-                if (type.equals("ALERT")) {
-                    if (mAplicationSetting.getSystemMonitorOKSetting()) {
-                        mAvMediaRecorder.startAlertRecord();
-                    }
-                } else if (type.equals("Contrast")) {
+//                if (type.equals("ALERT")) {
+//                    if (mAplicationSetting.getSystemMonitorOKSetting()) {
+//                        mAvMediaRecorder.startAlertRecord();
+//                    }
+//                } else
+                    if (type.equals("Contrast")) {
                     if (message.equals("true")) {
                         if (!mAplicationSetting.getSystemContrastSetting()) {
                             mAplicationSetting.setSystemContrastSetting(true);
@@ -244,6 +246,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 startMonitorIfNeeded();
             }
         }
+        Intent serIntent = new Intent(this, AlertManagerService.class);
+        serIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startService(serIntent);
     }
 
     private void initTUTK() {
@@ -325,6 +330,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             mAvMediaRecorder.initVideo();
             mAvMediaRecorder.avMediaRecorderStartVideo();
             cameraRuning = true;
+            mTutk.setAudioStatus(true);
+            mTutk.registAudioListener();
             mAplicationSetting.setSystemMonitorOKSetting(true);
             setCameraStatusToServer(true);
         }
@@ -338,7 +345,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (cameraStatusInServer) {
             mAvMediaRecorder.avMediaRecorderStopVideo();
             cameraRuning = false;
+            mTutk.setAudioStatus(false);
+            mTutk.unRegistAudioListener();
+            if (CallState == CallStateOn) {
+                LogTool.d(TAG,"Stop one key call when stop camera");
+                mTutk.stopOneKeyCall();
+            }
             mAplicationSetting.setSystemMonitorOKSetting(false);
+            mTutk.stopPTZpath();
             setCameraStatusToServer(false);
         }
 
@@ -468,6 +482,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             intend.setAction(ACTION_STOP_CAMERA);
             sendBroadcast(intend);
             mIsCmdComeFromOpenHotSpot = false;
+            LogTool.d(TAG,"Send open hot spot broadcast success.");
             android.os.Process.killProcess(android.os.Process.myPid());
         }
     }

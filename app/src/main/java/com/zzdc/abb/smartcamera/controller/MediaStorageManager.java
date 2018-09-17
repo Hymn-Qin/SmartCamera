@@ -339,10 +339,10 @@ public class MediaStorageManager {
             long time = getHistoryMediaStartTime(absolutePath);
             Cursor cursor = mDb.rawQuery("select * from " + DataBaseHelper.History.TABLE
                     + " where " + DataBaseHelper.History.START_LONG + " > " + time
-                    + " oder by " + DataBaseHelper.History.START_LONG + " asc", null);
+                    + " order by " + DataBaseHelper.History.START_LONG + " asc", null);
             String nextFile = null;
             if (cursor != null) {
-                while (cursor.moveToNext()) {
+                if (cursor.moveToFirst()) {
                     int indexName = cursor.getColumnIndex(DataBaseHelper.History.FILE_NAME);
                     nextFile = cursor.getString(indexName);
                 }

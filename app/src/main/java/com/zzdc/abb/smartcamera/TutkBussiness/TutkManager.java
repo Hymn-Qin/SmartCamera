@@ -70,6 +70,35 @@ public class TutkManager extends IOTCAPIs {
         }
     }
 
+    public void stopOneKeyCall() {
+        for(TutkSession mSession : mSessions.values()) {
+            mSession.getTutkCmdManger().handleStopOneKeyCall();
+        }
+    }
+
+    public void stopPTZpath() {
+        for(TutkSession mSession : mSessions.values()) {
+            mSession.getTutkCmdManger().handleStopWatchingPath();
+        }
+    }
+
+    public void setAudioStatus(boolean value) {
+        for(TutkSession mSession : mSessions.values()) {
+            mSession.getTutkCmdManger().setAudioStatus(value);
+        }
+    }
+
+    public void registAudioListener() {
+        for(TutkSession mSession : mSessions.values()) {
+            mSession.getTutkCmdManger().registeraudioEncoderListener();
+        }
+    }
+
+    public void unRegistAudioListener() {
+        for(TutkSession mSession : mSessions.values()) {
+            mSession.getTutkCmdManger().unRegisteraudioEncoderListener();
+        }
+    }
     private void startSession() {
         m_bStoped = false;
 

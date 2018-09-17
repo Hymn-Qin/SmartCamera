@@ -58,7 +58,7 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
         return ContrastManagerHolder.INSTANCE;
     }
 
-    private List<OnContrastListener> onContrastListeners = new ArrayList<>();
+    private CopyOnWriteArrayList<OnContrastListener> onContrastListeners = new CopyOnWriteArrayList<>();
 
     public void onContrasManager(OnContrastListener onContrastListener) {
         if (!onContrastListeners.contains(onContrastListener)) {
@@ -200,11 +200,12 @@ public class ContrastManager implements VideoGather.VideoRawDataListener {
             isContrast = isOK;
             if (isContrast) {
                 InitFaceFeatureManager();
-                videoDatas = new LinkedBlockingQueue<>();
+                videoDatas = new LinkedBlockingQueue<>(2);
                 familyFaceFRBeans = new CopyOnWriteArrayList<>();
                 focusFaceFRBeans = new CopyOnWriteArrayList<>();
             } else {
                 if (contrastThread != null) {
+                    contrastThread.interrupt();
                     contrastThread = null;
                 }
                 videoDatas = null;

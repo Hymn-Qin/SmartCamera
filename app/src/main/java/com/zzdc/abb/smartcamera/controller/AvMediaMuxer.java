@@ -61,16 +61,9 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
                     }
                 }
             }
-            try {
-                mMediaMuxer.stop();
-                mMediaMuxer.release();
-            } catch (Exception e) {
-                LogTool.e(TAG, "Stop MediaMuxer failed!!! : ", e);
-            }
             LogTool.d(TAG, "Media muxer thread stop.");
         }
     };
-
     public AvMediaMuxer(String type) {
         this.types = type;
     }
@@ -122,21 +115,29 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
     public void stopMediaMuxer() {
         LogTool.d(TAG, "Stop media muxer");
         mMuxering = false;
+        AudioEncoder.getInstance().unRegisterEncoderListener(this);
+        VideoEncoder.getInstance().unRegisterEncoderListener(this);
         if (mWorkThread != null) {
             mWorkThread.interrupt();
         }
-        AudioEncoder.getInstance().unRegisterEncoderListener(this);
-        VideoEncoder.getInstance().unRegisterEncoderListener(this);
+        try {
+            mMediaMuxer.stop();
+            mMediaMuxer.release();
+        } catch (Exception e) {
+            LogTool.e(TAG,"Try stop MediaMuxer failed!!! : ",e);
+        }
     }
 
     @Override
     public void onAudioEncoded(EncoderBuffer buf) {
-        if (!mMuxering)
+        if(!mMuxering)
             return;
 
         ByteBuffer bufferSrc = buf.getByteBuffer();
         MediaCodec.BufferInfo infoSrc = buf.getBufferInfo();
         if (infoSrc.presentationTimeUs < mLastAudioFrameTimestamp) {
+            LogTool.e(TAG," Audio : presentationTimeUs = "+infoSrc.presentationTimeUs+
+                    "; mLastAudioFrameTimestamp = "+mLastAudioFrameTimestamp);
             return;
         } else {
             mLastAudioFrameTimestamp = infoSrc.presentationTimeUs;
@@ -165,6 +166,8 @@ public class AvMediaMuxer implements AudioEncoder.AudioEncoderListener, VideoEnc
         ByteBuffer bufferSrc = buf.getByteBuffer();
         MediaCodec.BufferInfo infoSrc = buf.getBufferInfo();
         if (infoSrc.presentationTimeUs < mLastVideoFrameTimestamp) {
+            LogTool.e(TAG," Video : presentationTimeUs = "+infoSrc.presentationTimeUs+
+                    "; mLastVideoFrameTimestamp = "+mLastVideoFrameTimestamp);
             return;
         } else {
             mLastVideoFrameTimestamp = infoSrc.presentationTimeUs;

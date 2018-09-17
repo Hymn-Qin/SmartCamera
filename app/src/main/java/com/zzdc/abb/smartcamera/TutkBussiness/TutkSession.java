@@ -60,6 +60,10 @@ public class TutkSession implements AvMediaTransfer.AvTransferLister {
         tutkCmdManger = new TutkCmdManager(this);
     }
 
+    public TutkCmdManager getTutkCmdManger() {
+        return tutkCmdManger;
+    }
+
     private class TutkSessionThread extends Thread {
         private TutkSessionThread(String name) {
             super(name);

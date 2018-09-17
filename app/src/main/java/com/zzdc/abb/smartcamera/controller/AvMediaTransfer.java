@@ -85,19 +85,23 @@ public class AvMediaTransfer implements AudioEncoder.AudioEncoderListener, Video
         contrastManager.onContrasManager(new OnContrastListener() {
             @Override
             public void onContrastRectList(List<Rect> rects) {
-                LogTool.d(TAG,"Attention please! there are alert faces!");
+//                LogTool.d(TAG,"Attention please! there are alert faces!");
                 if (null != mRects) {
-                    int rectNum = rects.size();
-                    for (int i =0; i<rectNum;i++){
-                        if (i>5) {
-                            break;
+                    try {
+                        int rectNum = rects.size();
+                        for (int i =0; i<rectNum;i++){
+                            if (i>5) {
+                                break;
+                            }
+                            Rect rect = rects.get(i);
+//                            Log.d(TAG,"Send from QXJ "+rect.left+","+rect.top+","+rect.right+","+rect.bottom);
+                            System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
+                            System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
+                            System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
+                            System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
                         }
-                        Rect rect = rects.get(i);
-                        Log.d(TAG,"Send from QXJ "+rect.left+","+rect.top+","+rect.right+","+rect.bottom);
-                        System.arraycopy(Packet.intToByteArray_Little(rect.left),0 , mRects,  i* 16,4);
-                        System.arraycopy(Packet.intToByteArray_Little(rect.top),0 , mRects,  i* 16 +4,4);
-                        System.arraycopy(Packet.intToByteArray_Little(rect.right),0 , mRects,  i* 16 + 8,4);
-                        System.arraycopy(Packet.intToByteArray_Little(rect.bottom),0 , mRects,  i* 16 + 12,4);
+                    } catch (Exception e) {
+                        LogTool.e(TAG,"There is a exception with onContrastRectList,please attention : ",e);
                     }
                 }
             }

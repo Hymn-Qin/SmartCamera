@@ -37,6 +37,11 @@
             </intent-filter>
         </activity>
 
+        <service android:name=".FaceFeature.AlertManagerService"
+            android:enabled="true"
+            android:exported="true">
+
+        </service>
 
     </application>
 

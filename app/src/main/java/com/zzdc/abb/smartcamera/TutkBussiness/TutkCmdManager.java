@@ -50,19 +50,18 @@ public class TutkCmdManager {
     private AvMediaTransfer mMediaTransfer = new AvMediaTransfer();
     private MotorManager mMotorManager = MotorManager.getManger();
     private PTZControlManager mViewPathManger = PTZControlManager.getInstance();
-    private AvMediaRecorder mAvMediaRecorder = null;
     private AACDecoder mAACDecoder;
     private ApplicationSetting mAplicationSetting = null;
     private MP4Extrator mExtractor = null;
+    private boolean shouldRegistAudio = false;
 
     private static final int STATUS_IDEL = 0;
     private static final int STATUS_RUNTIME_TRANSFER = 1;
     private static final int STATUS_HISTORY_TRANSFER = 2;
     private static final int STATUS_WARNING_TRANSFER = 3;
     private int mTransmissionStatus = STATUS_IDEL;
-    private volatile boolean isStopFromHistoryOrAlert = false;
 
-    private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = new ThreadLocal<SimpleDateFormat>() {
+    private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = new ThreadLocal<SimpleDateFormat>(){
         @Override
         protected SimpleDateFormat initialValue() {
             return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -84,12 +83,16 @@ public class TutkCmdManager {
     private static final String SET_HISTORY_FILE = "setHistoryVideo";
     private static final String CHANGE_POSE = "CHANGE_POSE";
     private static final String SET_FACES = "setFacePictures";
+    private static final String HISTORY_TO_LIVE = "historyToLive";
 
     private static final String GET_ALERT_INFORMATION = "getAlertInfoList";
     private static final String SET_ALERT_FILE = "setAlertVideo";
 
     public TutkCmdManager(TutkSession tutkSession) {
         mTutkSession = tutkSession;
+        mAplicationSetting = ApplicationSetting.getInstance();
+        shouldRegistAudio = mAplicationSetting.getSystemMonitorOKSetting();
+        LogTool.d(TAG,"shouldRegistAudio = "+shouldRegistAudio);
     }
 
     public void closeIOCTRL() {
@@ -97,7 +100,7 @@ public class TutkCmdManager {
     }
 
     public void uninit() {
-        Log.d("TutkCmdManager", "uninit");
+        Log.d(TAG, "uninit");
         if (mTutkSession != null) {
             mTutkSession.releaseRemoteCallRes();
             mTutkSession.unregistRemoteAudioDataMonitor(mAACDecoder);
@@ -114,7 +117,7 @@ public class TutkCmdManager {
     }
 
     public void HandleIOCTRLCmd(int sid, int avIndex, byte[] buf, int type) {
-        LogTool.d(TAG, "HandleIOCTRLCmd");
+        LogTool.d(TAG, "HandleIOCTRLCmd start.");
         ByteArrayInputStream in = null;
         switch (type) {
             case AVIOCTRLDEFs.IOTYPE_USER_IPCAM_START:
@@ -160,7 +163,7 @@ public class TutkCmdManager {
                 mViewPathManger.PTZPathStart(receiveJsonStr);
                 break;
             case PTZ_PATH_STOP:
-                mMotorManager.stopPath();
+                handleStopWatchingPath();
                 break;
             case START_ONE_KEY_CALL:
                 handleStartOneKeyCall();
@@ -186,37 +189,53 @@ public class TutkCmdManager {
             case GET_ALERT_INFORMATION:
                 handleGetAlertInfo();
                 break;
+            case HISTORY_TO_LIVE:
+                handleHistoryToLive();
+                break;
             default:
                 break;
         }
     }
 
+    public void handleStopWatchingPath() {
+        LogTool.d(TAG,"Stop watching path.");
+        mMotorManager.stopPath();
+    }
+
     private void handleIpCameraStart() {
         LogTool.d(TAG, "IOTYPE_USER_IPCAM_START");
-        if (isStopFromHistoryOrAlert) {
-            try {
-                Thread.sleep(5000);
-            } catch (Exception e ) {
-                LogTool.e(TAG,"Sleep 5 second is interrupt : ",e);
-            }
-            LogTool.d(TAG, "Switch history video to live video.");
-            isStopFromHistoryOrAlert = false;
-        }
 
         if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
             if (mExtractor != null) {
-                mExtractor.start();
+                mExtractor.stop();
                 mExtractor.unRegisterExtratorListener(mMediaTransfer);
                 mExtractor = null;
             }
         }
         mTransmissionStatus = STATUS_RUNTIME_TRANSFER;
         mMediaTransfer.setHistoryVideoPlayingStatus(false);
-        AudioEncoder.getInstance().registerEncoderListener(mMediaTransfer);
+        if (shouldRegistAudio) {
+            registeraudioEncoderListener();
+        }
         VideoEncoder.getInstance().registerEncoderListener(mMediaTransfer);
         mMediaTransfer.startAvMediaTransfer();
         mMediaTransfer.registerAvTransferListener(mTutkSession);
         mTutkSession.writeMessge("ok");
+    }
+
+    public void setAudioStatus(boolean status) {
+        LogTool.d(TAG,"Set audio listener status to : "+status);
+        shouldRegistAudio = status;
+    }
+
+    public void registeraudioEncoderListener() {
+        LogTool.d(TAG,"register audio Encoder Listener");
+        AudioEncoder.getInstance().registerEncoderListener(mMediaTransfer);
+    }
+
+    public void unRegisteraudioEncoderListener() {
+        LogTool.d(TAG,"unRegister audio Encoder Listener");
+        AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
     }
 
     private void handleIpCameraStop() {
@@ -224,12 +243,11 @@ public class TutkCmdManager {
         mTutkSession.writeMessge("ok");
 
         if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
-            AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+            unRegisteraudioEncoderListener();
             VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
             mMediaTransfer.unRegisterAvTransferListener(mTutkSession);
             mMediaTransfer.stopAvMediaTransfer();
         } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
-            isStopFromHistoryOrAlert = true;
             if (mExtractor != null) {
                 mExtractor.stop();
                 mExtractor = null;
@@ -285,7 +303,7 @@ public class TutkCmdManager {
         AudioGather.getInstance().startRecord();
     }
 
-    private void handleStopOneKeyCall() {
+    public void handleStopOneKeyCall() {
         LogTool.d(TAG, "Handle " + STOP_ONE_KEY_CALL + ", CallState=" + MainActivity.CallState);
         MainActivity.CallState = MainActivity.CallStateOff;
         if (mTutkSession != null) {
@@ -337,6 +355,26 @@ public class TutkCmdManager {
         }
     }
 
+    private void handleHistoryToLive() {
+        LogTool.d(TAG, "Switch to live video from history video.");
+        if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
+            if (mExtractor != null) {
+                mExtractor.stop();
+                mExtractor.unRegisterExtratorListener(mMediaTransfer);
+                mExtractor = null;
+            }
+        }
+        mTransmissionStatus = STATUS_RUNTIME_TRANSFER;
+        mMediaTransfer.setHistoryVideoPlayingStatus(false);
+        if (shouldRegistAudio) {
+            registeraudioEncoderListener();
+        }
+        VideoEncoder.getInstance().registerEncoderListener(mMediaTransfer);
+//        mMediaTransfer.startAvMediaTransfer();
+//        mMediaTransfer.registerAvTransferListener(mTutkSession);
+        mTutkSession.writeMessge("ok");
+    }
+
     private void handleSetHistoryFile(JSONObject jObj) {
         try {
             String stringTime = jObj.getString("time");
@@ -355,13 +393,13 @@ public class TutkCmdManager {
                 j.put("desc", " ");
                 mTutkSession.writeMessge(j.toString());
 
-                LogTool.d(TAG,"LEON-We want history file name = "+file);
+                LogTool.d(TAG,"We want history file name = "+file);
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
-                    LogTool.d(TAG,"LEON-Stop live video and start history video.");
-                    AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                    LogTool.d(TAG,"Stop live video and start history video.");
+                    unRegisteraudioEncoderListener();
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                 } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER){
-                    LogTool.d(TAG,"LEON-Stop (history or alert) video and start (history or alert) video.");
+                    LogTool.d(TAG,"Stop (history or alert) video and start (history or alert) video.");
                     if (mExtractor != null) {
                         mExtractor.unRegisterExtratorListener(mMediaTransfer);
                         mExtractor.stop();
@@ -372,10 +410,9 @@ public class TutkCmdManager {
                 long videoStartTime = MediaStorageManager.getHistoryMediaStartTime(file);
                 mExtractor = new MP4Extrator(file, userGivenTime, videoStartTime);
                 mExtractor.registerExtratorListener(mMediaTransfer);
-                if (mExtractor.init()) {
-                    mExtractor.start();
-                    mTransmissionStatus = STATUS_HISTORY_TRANSFER;
-                }
+                mExtractor.start();
+                mExtractor.init();
+                mTransmissionStatus = STATUS_HISTORY_TRANSFER;
             }
         } catch (JSONException | ParseException e) {
             LogTool.w(TAG, "Handle " + SET_HISTORY_FILE + " with exception, ", e);
@@ -389,7 +426,6 @@ public class TutkCmdManager {
 
             MotorCmd.DEVICE_POSE = POSE;
 
-            mAplicationSetting = ApplicationSetting.getInstance();
             mAplicationSetting.setDevicePose(POSE);
         } catch (JSONException e) {
             LogTool.w(TAG, "Handle " + CHANGE_POSE + " with exception, ", e);
@@ -416,7 +452,7 @@ public class TutkCmdManager {
                 FacePictures facePicture = Utils.getFaceImage(faceData, name, direction);
                 facePictures.add(facePicture);
             }
-            //提取人脸数据
+            //??????
             Utils.startGetFeature(facePictures);
     }
 
@@ -448,7 +484,7 @@ public class TutkCmdManager {
                 mTutkSession.writeMessge(j.toString());
 
                 if (mTransmissionStatus == STATUS_RUNTIME_TRANSFER) {
-                    AudioEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
+                    unRegisteraudioEncoderListener();
                     VideoEncoder.getInstance().unRegisterEncoderListener(mMediaTransfer);
                 } else if (mTransmissionStatus == STATUS_HISTORY_TRANSFER || mTransmissionStatus == STATUS_WARNING_TRANSFER) {
                     if (mExtractor != null) {

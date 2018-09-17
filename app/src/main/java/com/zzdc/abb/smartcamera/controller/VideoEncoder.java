@@ -252,7 +252,7 @@ public class VideoEncoder implements VideoGather.VideoRawDataListener {
 
         videoFormat = MediaFormat.createVideoFormat(VIDEO_MIME_TYPE, mWidth, mHeight);
         videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, mFps);
-        videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, (int)(mWidth * mHeight * 0.8));
+        videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, (int)(mWidth * mHeight * 0.4));
         videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, selectColorFormat(VIDEO_MIME_TYPE));
         videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
         Log.d(TAG, "Video format: " + videoFormat.toString());

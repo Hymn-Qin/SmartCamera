@@ -188,7 +188,6 @@ public class AvMediaRecorder {
         Log.d(TAG,"avMediaRecorderStop");
         if(mMuxer != null){
             stopRecord();
-            stopAlertRecord();
             mHandler.removeCallbacksAndMessages(null);
         }
         SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
@@ -208,7 +207,6 @@ public class AvMediaRecorder {
         mIsMonitor = false;
         if(mMuxer != null){
             stopRecord();
-            stopAlertRecord();
             mHandler.removeCallbacksAndMessages(null);
         }
         SmartCameraApplication.getContext().unregisterReceiver(mReceiver);
@@ -285,76 +283,5 @@ public class AvMediaRecorder {
             }
         });*/
         mHandler.sendEmptyMessageDelayed(START_RECORD, 3000);
-    }
-
-
-    public void startAlertRecord() {
-        Log.d(TAG, "startRecord");
-        if (!MediaStorageManager.getInstance().isReady()) {
-            Log.d(TAG, "MediaStorageManager hasn't ready");
-            return;
-        }
-        if (alertMuxer != null && alertMuxer.mMuxering) {
-            resetStopTime(3000);
-            return;
-        }
-        Log.d("qxj", "startAlertRecord---");
-        alertMuxer = new AvMediaMuxer("Alert");
-        waitAlertForStart();
-    }
-
-    private void stopAlertRecord() {
-        Log.d("qxj", " stopAlertRecord ");
-        if (alertMuxer != null) {
-            alertMuxer.stopMediaMuxer();
-            alertMuxer = null;
-        }
-    }
-
-    private Handler handler;
-    private Runnable runnable;
-
-    private void waitAlertForStart() {
-        if (MediaStorageManager.getInstance().isReady()) {
-
-            if (alertMuxer == null) {
-                return;
-            }
-            if (!alertMuxer.startMediaMuxer()) {
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        waitAlertForStart();
-                    }
-                }, 1000);
-            } else {
-                handler = new Handler();
-                runnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        stopAlertRecord();
-                    }
-                };
-                handler.postDelayed(runnable, 30 * 1000);
-            }
-        }
-
-    }
-
-    public void resetStopTime(long time) {
-        if (handler != null && runnable != null) {
-            handler.removeCallbacks(runnable);
-            handler = null;
-            runnable = null;
-            handler = new Handler();
-            runnable = new Runnable() {
-                @Override
-                public void run() {
-                    stopAlertRecord();
-                }
-            };
-            handler.postDelayed(runnable, time);
-
-        }
     }
 }
